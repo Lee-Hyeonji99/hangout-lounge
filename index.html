@@ -9,31 +9,43 @@
   html,body{height:100%}
   body{background:#111;color:#eee;font-family:system-ui,sans-serif;overflow:hidden}
   #hint{position:absolute;left:14px;top:14px;font-size:13px;color:#bbb;
-    background:#0008;padding:8px 12px;border-radius:8px;pointer-events:none}
+    background:#0008;padding:8px 12px;border-radius:8px;pointer-events:none;max-width:420px}
+  #netPanel{position:absolute;right:14px;top:14px;font-size:13px;color:#ddd;
+    background:#0009;padding:10px 12px;border-radius:8px;display:flex;flex-direction:column;gap:6px;min-width:240px}
+  #netPanel input{font:inherit;padding:5px 7px;border-radius:5px;border:1px solid #555;background:#222;color:#eee}
+  #netPanel button{font:inherit;padding:5px 9px;border-radius:5px;border:1px solid #567;background:#234;color:#cde;cursor:pointer}
+  #netPanel button:hover{background:#345}
+  #myId{font-family:monospace;color:#8fd}
+  #peerList{font-size:11px;color:#9ab}
 </style>
 <script type="importmap">
 { "imports": { "three": "./lib/vendor/three/build/three.module.js" } }
 </script>
+<script src="./lib/vendor/peerjs/peerjs.min.js"></script>
 </head>
 <body>
-<div id="hint">2단계: 리깅된 아바타 로드 — 1/2 키로 idle/walk 전환.
-  docs/PLAN.md 8번 참고. (sit 클립은 이 모델에 없어서 아직 자세만 흉내)</div>
+<div id="hint">3단계: WebRTC 메시 연결 — WASD로 이동(내 아바타), 오른쪽 패널에서
+  다른 탭의 ID로 연결. docs/PLAN.md 8번 참고.</div>
+<div id="netPanel">
+  내 ID: <span id="myId">연결 중…</span>
+  <input id="remoteIdInput" placeholder="상대 ID 붙여넣기">
+  <button id="connectBtn">연결</button>
+  <div id="peerList">연결된 상대: 없음</div>
+</div>
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from './lib/vendor/three/examples/jsm/loaders/GLTFLoader.js';
+import { createMesh } from './lib/webrtc-mesh.js';
 
 /* ============================================================
-   2단계 — docs/PLAN.md 8번. 1단계(캡슐 placeholder)에서 실제 리깅
-   아바타로 교체. 원래 계획은 Quaternius였지만, 이 작업 환경의 네트워크
-   프록시가 Quaternius/Kenney 등 에셋 사이트 도메인을 막고 있어서(조직
-   정책 allowlist) 대신 **three.js 공식 예제 에셋(Soldier.glb, CC0)**을
-   썼다 — GitHub raw 콘텐츠는 허용돼 있어서 mrdoob/three.js 저장소에서
-   직접 받았다. 품질/신뢰도 면에서 손색없는 대안(three.js 자체 애니메이션
-   스키닝 예제가 쓰는 바로 그 모델).
+   3단계 — docs/PLAN.md 8번. 같은 브라우저 2탭(또는 다른 기기)을 PeerJS로
+   연결해서 위치/상태 동기화 + 보간이 실제로 부드러운지 확인한다.
 
-   Soldier.glb 는 Idle/Walk/Run/TPose 네 개 클립을 갖고 있고 sit 은 없다
-   — sit 이 필요해지면(docs/PLAN.md 5번) 다른 리깅 소스를 찾아 교체하거나
-   이 모델에 커스텀 클립을 하나 더 구워 넣어야 한다. 지금은 자리만 잡아둔다.
+   상태 동기화 설계는 docs/PLAN.md 4번 그대로:
+   - 위치/회전: 초당 ~10회, 받는 쪽은 마지막 두 스냅샷을 보간(lerp)해서 그린다.
+   - 상태 이름(Idle/Walk): 바뀔 때만 보낸다.
+   지금은 프로토타입이라 한 DataConnection(기본 reliable 채널)에 둘 다
+   실어 보낸다 — "unreliable 채널로 더 가볍게"는 나중 최적화 대상.
    ============================================================ */
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
@@ -46,8 +58,6 @@ scene.background = new THREE.Color(0x1a1a1e);
 scene.fog = new THREE.Fog(0x1a1a1e, 10, 30);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
-camera.position.set(0, 2.2, 4.2);
-camera.lookAt(0, 1, 0);
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x333333, 1.2);
 scene.add(hemi);
@@ -62,45 +72,161 @@ const floor = new THREE.Mesh(
 floor.rotation.x = -Math.PI/2;
 scene.add(floor);
 
-/* ---- 아바타 로드 ---- */
+/* ---- 아바타 팩토리 ----
+   내 아바타/상대 아바타 전부 같은 glb 를 각자 인스턴스로 로드한다(스켈레톤
+   애니메이션은 인스턴스 공유가 까다로워서, 지금 규모(최대 12명)에선
+   그냥 각자 로드하는 게 제일 단순하고 안전하다). */
 const loader = new GLTFLoader();
-let mixer = null;
-const actions = {};
-let currentAction = null;
-
-function playState(name){
-  const next = actions[name];
-  if(!next || next===currentAction) return;
-  next.reset().fadeIn(0.3).play();
-  if(currentAction) currentAction.fadeOut(0.3);
-  currentAction = next;
+async function spawnAvatar(){
+  const gltf = await loader.loadAsync('./assets/avatars/soldier.glb');
+  const model = gltf.scene;
+  scene.add(model);
+  const mixer = new THREE.AnimationMixer(model);
+  const actions = {};
+  gltf.animations.forEach(clip=>{ actions[clip.name] = mixer.clipAction(clip); });
+  let current = null;
+  function playState(name){
+    const next = actions[name];
+    if(!next || next===current) return;
+    next.reset().fadeIn(0.3).play();
+    if(current) current.fadeOut(0.3);
+    current = next;
+  }
+  playState('Idle');
+  return { model, mixer, playState };
 }
 
-loader.load('./assets/avatars/soldier.glb', (gltf)=>{
-  const model = gltf.scene;
-  model.scale.setScalar(1.0);
-  scene.add(model);
+/* 여기부터 async main() 안에서 실행한다 — 예전에 다른 게임(붕어빵 카페)에서
+   최상위(top-level) await 가 실패(GLB 404 등)했을 때 그 뒤의 모든 코드가
+   조용히 실행 안 되는 버그를 실제로 겪었다(이벤트 리스너 등록까지 전부
+   증발 — "시작 버튼이 안 눌린다"는 신고로 발견). try/catch 로 감싸서 같은
+   사고가 재발하지 않게 한다. */
+async function main(){
 
-  mixer = new THREE.AnimationMixer(model);
-  gltf.animations.forEach(clip=>{ actions[clip.name] = mixer.clipAction(clip); });
-  console.log('로드된 애니메이션 클립:', Object.keys(actions));
+/* ---- 내 아바타 + WASD 이동 ---- */
+const me = await spawnAvatar();
+const keys = {KeyW:false,KeyA:false,KeyS:false,KeyD:false};
+addEventListener('keydown', e=>{ if(e.code in keys) keys[e.code]=true; });
+addEventListener('keyup',   e=>{ if(e.code in keys) keys[e.code]=false; });
 
-  playState('Idle');
-}, undefined, (err)=>{ console.error('아바타 로드 실패:', err); });
+const moveDir = new THREE.Vector3();
+let myState = 'Idle';
+function updateMyAvatar(dt){
+  moveDir.set(
+    (keys.KeyD?1:0)-(keys.KeyA?1:0),
+    0,
+    (keys.KeyS?1:0)-(keys.KeyW?1:0)
+  );
+  const moving = moveDir.lengthSq()>0;
+  if(moving){
+    moveDir.normalize();
+    me.model.position.addScaledVector(moveDir, dt*2.2);
+    me.model.rotation.y = Math.atan2(moveDir.x, moveDir.z);
+  }
+  const nextState = moving ? 'Walk' : 'Idle';
+  if(nextState!==myState){ myState=nextState; me.playState(myState); netSendStateSoon(); }
+}
 
-// 상태 이름 — 나중에 네트워크로는 이 이름 문자열만 오간다(docs/PLAN.md 4번).
-// Soldier.glb 클립 이름(Idle/Walk)에 맞춰뒀다 — 다른 모델로 바꾸면 이 맵도 같이 바꾼다.
-window.addEventListener('keydown', e=>{
-  if(e.code==='Digit1') playState('Idle');
-  if(e.code==='Digit2') playState('Walk');
+/* ---- 카메라: 내 아바타를 뒤에서 살짝 위에서 따라간다 ---- */
+function updateCamera(){
+  const back = new THREE.Vector3(0, 2.4, 4.2);
+  camera.position.copy(me.model.position).add(back);
+  camera.lookAt(me.model.position.x, me.model.position.y+1, me.model.position.z);
+}
+
+/* ---- 네트워킹 ----
+   PeerJS 무료 브로커로 시그널링(최초 연결 중개)만 하고, 그 뒤론 P2P.
+   docs/PLAN.md 3-a. */
+const myIdEl = document.getElementById('myId');
+const peerListEl = document.getElementById('peerList');
+const remoteAvatars = new Map(); // peerId -> {model, mixer, playState, targetPos, targetYaw}
+
+const mesh = createMesh({
+  onPeerJoin: async (id)=>{
+    updatePeerList();
+    if(!remoteAvatars.has(id)){
+      const av = await spawnAvatar();
+      av.model.position.set(0,0,0);
+      remoteAvatars.set(id, {...av, targetPos:av.model.position.clone(), targetYaw:0});
+    }
+  },
+  onPeerLeave: (id)=>{
+    const av = remoteAvatars.get(id);
+    if(av){ scene.remove(av.model); remoteAvatars.delete(id); }
+    updatePeerList();
+  },
+  onData: (fromId, msg)=>{
+    const av = remoteAvatars.get(fromId);
+    if(!av) return;
+    if(msg.type==='pos'){
+      av.targetPos.set(msg.x, msg.y, msg.z);
+      av.targetYaw = msg.yaw;
+    } else if(msg.type==='state'){
+      av.playState(msg.state);
+    }
+  },
 });
+
+function updatePeerList(){
+  const ids = mesh.peers;
+  peerListEl.textContent = '연결된 상대: ' + (ids.length ? ids.join(', ') : '없음');
+}
+
+mesh.ready().then(id=>{
+  myIdEl.textContent = id;
+  // 편의를 위해 ?connect=<id> 로 열면 자동으로 상대에게 연결(2탭 테스트용).
+  const params = new URLSearchParams(location.search);
+  const target = params.get('connect');
+  if(target) mesh.connectTo(target);
+});
+
+document.getElementById('connectBtn').addEventListener('click', ()=>{
+  const id = document.getElementById('remoteIdInput').value.trim();
+  if(id) mesh.connectTo(id);
+});
+
+// 위치는 초당 ~10회만 보낸다(docs/PLAN.md 4번) — 매 프레임 보내면 과하다.
+let posSendAcc = 0;
+const POS_SEND_INTERVAL = 0.1; // 100ms = 초당 10회
+function netSendPosMaybe(dt){
+  posSendAcc += dt;
+  if(posSendAcc < POS_SEND_INTERVAL) return;
+  posSendAcc = 0;
+  mesh.broadcast({type:'pos', x:me.model.position.x, y:me.model.position.y,
+    z:me.model.position.z, yaw:me.model.rotation.y});
+}
+function netSendStateSoon(){
+  mesh.broadcast({type:'state', state:myState});
+}
+
+/* ---- 남의 아바타 보간 ----
+   마지막으로 받은 스냅샷(targetPos/targetYaw)을 향해 매 프레임 조금씩
+   따라간다 — 뚝뚝 끊기지 않게(docs/PLAN.md 4번, 로블록스와 같은 원리). */
+function updateRemoteAvatars(dt){
+  const lerpT = Math.min(1, dt*10);
+  remoteAvatars.forEach(av=>{
+    av.model.position.lerp(av.targetPos, lerpT);
+    // 각도는 최단 경로로 보간
+    let dYaw = av.targetYaw - av.model.rotation.y;
+    dYaw = Math.atan2(Math.sin(dYaw), Math.cos(dYaw));
+    av.model.rotation.y += dYaw*lerpT;
+  });
+}
 
 let last = performance.now();
 function frame(now){
   requestAnimationFrame(frame);
   const dt = Math.min((now-last)/1000, 0.1);
   last = now;
-  if(mixer) mixer.update(dt);
+
+  updateMyAvatar(dt);
+  updateRemoteAvatars(dt);
+  updateCamera();
+  netSendPosMaybe(dt);
+
+  me.mixer.update(dt);
+  remoteAvatars.forEach(av=>av.mixer.update(dt));
+
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
@@ -109,6 +235,15 @@ addEventListener('resize', ()=>{
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+});
+
+} // main() 끝
+
+main().catch(err=>{
+  console.error('[hangout-lounge] 초기화 실패:', err);
+  document.getElementById('hint').textContent =
+    '초기화 실패 — 콘솔 확인. (' + err.message + ')';
+  document.getElementById('hint').style.color = '#f88';
 });
 </script>
 </body>

@@ -61,5 +61,16 @@ jsDelivr의 GitHub CDN(`cdn.jsdelivr.net/gh/...`)으로 서로 직접 import한�
 
 ## 진행 상태
 
-1단계(로컬 프로토타입, 네트워킹 없음) 진행 중 — `index.html`. 다음 단계는
-`docs/PLAN.md` 8번(구현 순서) 참고.
+3단계(WebRTC 메시 연결)까지 코드는 있음 — `index.html` + `lib/webrtc-mesh.js`.
+**단, 실제 P2P 연결 자체는 이 개발 환경에서 검증 못 함** — 이 환경의 네트워크
+프록시가 PeerJS 기본 브로커(`0.peerjs.com`)도 막고 있어서(Quaternius/jsDelivr/
+unpkg와 같은 조직 정책 allowlist 문제) `Peer` 객체가 브로커에 연결을 못 한다.
+코드 자체(아바타 로드·WASD 이동·카메라 추적·UI·보간 수식)는 Playwright로
+확인했고 PeerJS 쪽은 "정상적으로 연결을 시도하다 네트워크 에러로 실패"까지만
+관찰함(코드 버그가 아니라 이 환경의 제약). **실제 브라우저 두 탭으로
+`index.html` 열어서 한쪽 ID를 복사해 다른 쪽 "상대 ID" 칸에 붙여넣고 연결
+버튼을 눌러 직접 검증 필요** — 또는 `index.html?connect=<상대ID>`로 열면
+자동 연결 시도.
+
+다음 단계는 `docs/PLAN.md` 8번(구현 순서) 4번(음성 추가)부터, 단 위 3단계
+실제 연결 검증이 먼저 끝나야 한다.
