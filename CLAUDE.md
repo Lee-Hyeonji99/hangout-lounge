@@ -24,9 +24,15 @@ jsDelivr의 GitHub CDN(`cdn.jsdelivr.net/gh/...`)으로 서로 직접 import한�
   web-games가 CDN import만 쓰다가 CDN이 막힌 네트워크에서 게임이 통째로 안 뜨는
   버그를 실제로 겪은 적이 있어서(그 수정 이력이 web-games repo에 남아있음),
   이 저장소는 처음부터 벤더링으로 시작한다. 버전 올릴 때만 수동으로 파일 교체.
-- 아바타: **Quaternius**(CC0, glTF, Universal Animation Library로 walk/idle/
-  sit 등 상태별 클립 재사용) — Mixamo는 2025년부터 서비스가 불안정해서 배제.
-  이유는 `docs/PLAN.md` 5번.
+- 아바타: 원래 계획은 **Quaternius**(CC0, glTF, Universal Animation Library —
+  `docs/PLAN.md` 5번)였는데, 이 작업 환경의 네트워크 프록시가 Quaternius/Kenney
+  같은 에셋 사이트 도메인을 막고 있어서(조직 정책 allowlist, GitHub만 허용)
+  받을 수가 없었다. 대신 **`assets/avatars/soldier.glb`**(three.js 공식 예제
+  에셋, CC0, `mrdoob/three.js` 저장소에서 GitHub raw로 받음)를 임시로 쓴다 —
+  Idle/Walk/Run/TPose 클립 보유, sit 없음. **정식 아바타(Quaternius 등)로
+  받을 수 있는 환경이 되면 이 파일만 교체**하면 된다 — `loader.load()` 경로
+  하나 + `actions` 맵의 클립 이름만 바꾸면 되도록 `index.html`을 짜뒀다.
+  Mixamo는 2025년부터 서비스가 불안정해서 애초에 배제.
 - 네트워킹: WebRTC(PeerJS로 시그널링 시작) — `docs/PLAN.md` 3번 전체가 설계.
 - 애니메이션 재생: `THREE.AnimationMixer` + 상태 이름 문자열만 네트워크로 전송,
   실제 클립 재생은 각자 클라이언트가 로컬에서(`docs/PLAN.md` 4번).

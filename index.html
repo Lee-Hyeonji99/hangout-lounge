@@ -11,18 +11,29 @@
   #hint{position:absolute;left:14px;top:14px;font-size:13px;color:#bbb;
     background:#0008;padding:8px 12px;border-radius:8px;pointer-events:none}
 </style>
+<script type="importmap">
+{ "imports": { "three": "./lib/vendor/three/build/three.module.js" } }
+</script>
 </head>
 <body>
-<div id="hint">1단계: 네트워킹 없는 로컬 프로토타입 — 캡슐은 실제 리깅 아바타(Quaternius)가
-  들어올 자리의 임시 대역. docs/PLAN.md 8번 참고.</div>
+<div id="hint">2단계: 리깅된 아바타 로드 — 1/2 키로 idle/walk 전환.
+  docs/PLAN.md 8번 참고. (sit 클립은 이 모델에 없어서 아직 자세만 흉내)</div>
 <script type="module">
-import * as THREE from './lib/vendor/three/build/three.module.js';
+import * as THREE from 'three';
+import { GLTFLoader } from './lib/vendor/three/examples/jsm/loaders/GLTFLoader.js';
 
 /* ============================================================
-   1단계(로컬 프로토타입) — docs/PLAN.md 8번의 첫 단계.
-   네트워킹 전혀 없음. 지금은 "아바타 자리에 뭐가 들어갈지"와 상태 전환
-   애니메이션 뼈대만 확인하는 게 목적이라, 실제 리깅 모델(Quaternius) 대신
-   캡슐 placeholder를 쓴다 — GLTFLoader로 바꿔 끼우는 지점만 미리 갈라둔다.
+   2단계 — docs/PLAN.md 8번. 1단계(캡슐 placeholder)에서 실제 리깅
+   아바타로 교체. 원래 계획은 Quaternius였지만, 이 작업 환경의 네트워크
+   프록시가 Quaternius/Kenney 등 에셋 사이트 도메인을 막고 있어서(조직
+   정책 allowlist) 대신 **three.js 공식 예제 에셋(Soldier.glb, CC0)**을
+   썼다 — GitHub raw 콘텐츠는 허용돼 있어서 mrdoob/three.js 저장소에서
+   직접 받았다. 품질/신뢰도 면에서 손색없는 대안(three.js 자체 애니메이션
+   스키닝 예제가 쓰는 바로 그 모델).
+
+   Soldier.glb 는 Idle/Walk/Run/TPose 네 개 클립을 갖고 있고 sit 은 없다
+   — sit 이 필요해지면(docs/PLAN.md 5번) 다른 리깅 소스를 찾아 교체하거나
+   이 모델에 커스텀 클립을 하나 더 구워 넣어야 한다. 지금은 자리만 잡아둔다.
    ============================================================ */
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
@@ -35,7 +46,7 @@ scene.background = new THREE.Color(0x1a1a1e);
 scene.fog = new THREE.Fog(0x1a1a1e, 10, 30);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
-camera.position.set(0, 2.4, 5.5);
+camera.position.set(0, 2.2, 4.2);
 camera.lookAt(0, 1, 0);
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x333333, 1.2);
@@ -51,32 +62,37 @@ const floor = new THREE.Mesh(
 floor.rotation.x = -Math.PI/2;
 scene.add(floor);
 
-/* ---- 아바타 placeholder ----
-   실제로 붙일 때: GLTFLoader로 Quaternius 모델 로드 → mixer 생성 →
-   idle/walk/sit 클립을 이름으로 찾아 clipAction. 지금은 상태 전환 뼈대만
-   캡슐 색/자세로 흉내 낸다(진짜 애니메이션 클립 없이). */
-const avatarGroup = new THREE.Group();
-const bodyMat = new THREE.MeshStandardMaterial({color:0x8fb8e8, roughness:0.6});
-const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.9, 4, 12), bodyMat);
-body.position.y = 1.05;
-avatarGroup.add(body);
-const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), bodyMat);
-head.position.y = 1.85;
-avatarGroup.add(head);
-scene.add(avatarGroup);
+/* ---- 아바타 로드 ---- */
+const loader = new GLTFLoader();
+let mixer = null;
+const actions = {};
+let currentAction = null;
 
-// 상태 몇 가지 — 나중에 네트워크로는 이 이름 문자열만 오간다(docs/PLAN.md 4번)
-const STATES = ['idle','walk','sit'];
-let stateIdx = 0;
-let stateT = 0;
-function setState(name){
-  stateIdx = STATES.indexOf(name);
-  stateT = 0;
+function playState(name){
+  const next = actions[name];
+  if(!next || next===currentAction) return;
+  next.reset().fadeIn(0.3).play();
+  if(currentAction) currentAction.fadeOut(0.3);
+  currentAction = next;
 }
+
+loader.load('./assets/avatars/soldier.glb', (gltf)=>{
+  const model = gltf.scene;
+  model.scale.setScalar(1.0);
+  scene.add(model);
+
+  mixer = new THREE.AnimationMixer(model);
+  gltf.animations.forEach(clip=>{ actions[clip.name] = mixer.clipAction(clip); });
+  console.log('로드된 애니메이션 클립:', Object.keys(actions));
+
+  playState('Idle');
+}, undefined, (err)=>{ console.error('아바타 로드 실패:', err); });
+
+// 상태 이름 — 나중에 네트워크로는 이 이름 문자열만 오간다(docs/PLAN.md 4번).
+// Soldier.glb 클립 이름(Idle/Walk)에 맞춰뒀다 — 다른 모델로 바꾸면 이 맵도 같이 바꾼다.
 window.addEventListener('keydown', e=>{
-  if(e.code==='Digit1') setState('idle');
-  if(e.code==='Digit2') setState('walk');
-  if(e.code==='Digit3') setState('sit');
+  if(e.code==='Digit1') playState('Idle');
+  if(e.code==='Digit2') playState('Walk');
 });
 
 let last = performance.now();
@@ -84,20 +100,7 @@ function frame(now){
   requestAnimationFrame(frame);
   const dt = Math.min((now-last)/1000, 0.1);
   last = now;
-  stateT += dt;
-
-  const state = STATES[stateIdx];
-  if(state==='idle'){
-    avatarGroup.position.y = 0;
-    avatarGroup.scale.y = 1 + Math.sin(stateT*2)*0.01; // 숨쉬기 흉내
-  } else if(state==='walk'){
-    avatarGroup.position.y = Math.abs(Math.sin(stateT*6))*0.05;
-    avatarGroup.rotation.y += dt*1.2;
-  } else if(state==='sit'){
-    avatarGroup.scale.y = 0.6;
-    avatarGroup.position.y = -0.35;
-  }
-
+  if(mixer) mixer.update(dt);
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
