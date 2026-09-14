@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>hangout-lounge</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:#111;color:#eee;font-family:system-ui,sans-serif;overflow:hidden}
+  #hint{position:absolute;left:14px;top:14px;font-size:13px;color:#bbb;
+    background:#0008;padding:8px 12px;border-radius:8px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="hint">1단계: 네트워킹 없는 로컬 프로토타입 — 캡슐은 실제 리깅 아바타(Quaternius)가
+  들어올 자리의 임시 대역. docs/PLAN.md 8번 참고.</div>
+<script type="module">
+import * as THREE from './lib/vendor/three/build/three.module.js';
+
+/* ============================================================
+   1단계(로컬 프로토타입) — docs/PLAN.md 8번의 첫 단계.
+   네트워킹 전혀 없음. 지금은 "아바타 자리에 뭐가 들어갈지"와 상태 전환
+   애니메이션 뼈대만 확인하는 게 목적이라, 실제 리깅 모델(Quaternius) 대신
+   캡슐 placeholder를 쓴다 — GLTFLoader로 바꿔 끼우는 지점만 미리 갈라둔다.
+   ============================================================ */
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a1e);
+scene.fog = new THREE.Fog(0x1a1a1e, 10, 30);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(0, 2.4, 5.5);
+camera.lookAt(0, 1, 0);
+
+const hemi = new THREE.HemisphereLight(0xffffff, 0x333333, 1.2);
+scene.add(hemi);
+const key = new THREE.DirectionalLight(0xffffff, 1.4);
+key.position.set(3, 6, 4);
+scene.add(key);
+
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(8, 32),
+  new THREE.MeshStandardMaterial({color:0x2a2a30, roughness:0.9})
+);
+floor.rotation.x = -Math.PI/2;
+scene.add(floor);
+
+/* ---- 아바타 placeholder ----
+   실제로 붙일 때: GLTFLoader로 Quaternius 모델 로드 → mixer 생성 →
+   idle/walk/sit 클립을 이름으로 찾아 clipAction. 지금은 상태 전환 뼈대만
+   캡슐 색/자세로 흉내 낸다(진짜 애니메이션 클립 없이). */
+const avatarGroup = new THREE.Group();
+const bodyMat = new THREE.MeshStandardMaterial({color:0x8fb8e8, roughness:0.6});
+const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.9, 4, 12), bodyMat);
+body.position.y = 1.05;
+avatarGroup.add(body);
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), bodyMat);
+head.position.y = 1.85;
+avatarGroup.add(head);
+scene.add(avatarGroup);
+
+// 상태 몇 가지 — 나중에 네트워크로는 이 이름 문자열만 오간다(docs/PLAN.md 4번)
+const STATES = ['idle','walk','sit'];
+let stateIdx = 0;
+let stateT = 0;
+function setState(name){
+  stateIdx = STATES.indexOf(name);
+  stateT = 0;
+}
+window.addEventListener('keydown', e=>{
+  if(e.code==='Digit1') setState('idle');
+  if(e.code==='Digit2') setState('walk');
+  if(e.code==='Digit3') setState('sit');
+});
+
+let last = performance.now();
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt = Math.min((now-last)/1000, 0.1);
+  last = now;
+  stateT += dt;
+
+  const state = STATES[stateIdx];
+  if(state==='idle'){
+    avatarGroup.position.y = 0;
+    avatarGroup.scale.y = 1 + Math.sin(stateT*2)*0.01; // 숨쉬기 흉내
+  } else if(state==='walk'){
+    avatarGroup.position.y = Math.abs(Math.sin(stateT*6))*0.05;
+    avatarGroup.rotation.y += dt*1.2;
+  } else if(state==='sit'){
+    avatarGroup.scale.y = 0.6;
+    avatarGroup.position.y = -0.35;
+  }
+
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(frame);
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
