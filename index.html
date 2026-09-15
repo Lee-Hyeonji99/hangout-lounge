@@ -392,9 +392,11 @@ function buildSky(){
 }
 buildSky();
 
+// 예전엔 아스팔트 같은 짙은 회색(0x2a2a30)이라 "무섭다"는 피드백을 받음 —
+// 따뜻한 톤의 광장 바닥(플라자 포장재 느낌)으로 교체.
 const floor = new THREE.Mesh(
   new THREE.CircleGeometry(70, 48),
-  new THREE.MeshStandardMaterial({color:0x2a2a30, roughness:0.9})
+  new THREE.MeshStandardMaterial({color:0xa89a80, roughness:0.9})
 );
 floor.rotation.x = -Math.PI/2;
 scene.add(floor);
@@ -1030,7 +1032,20 @@ async function spawnAvatar(appearance){
     stateStartT = t;
   }
   function updateAppearance(appearance){ applyAppearance(parts, appearance); }
-  return { model: parts.root, mixer, playState, updateAppearance };
+  /* 담배 연기 입자는 parts.root의 자식이 아니라 scene에 직접 추가돼 있어서
+   * (세계 좌표로 흘러가야 하니까) 아바타가 나갈 때 scene.remove(model)만으론
+   * 안 지워진다 — 남아있던 사람이 나갔는데 자기가 마지막으로 피우던 연기가
+   * 화면에 계속 남아있던 버그가 여기서 났다. peer가 나갈 때 이것도 같이
+   * 치워야 한다. */
+  function dispose(){
+    smokeParticles.forEach(sp=>{
+      scene.remove(sp.mesh);
+      sp.mesh.geometry.dispose();
+      sp.mesh.material.dispose();
+    });
+    smokeParticles.length = 0;
+  }
+  return { model: parts.root, mixer, playState, updateAppearance, dispose };
 }
 
 /* 여기부터 async main() 안에서 실행한다 — 예전에 다른 게임(붕어빵 카페)에서
@@ -1498,6 +1513,7 @@ const mesh = createMesh({
     if(av){
       logEvent(`${av.nickname || '누군가'}님이 나갔어요`);
       scene.remove(av.model);
+      av.dispose(); // 담배 연기 등 scene에 직접 떠 있는 잔여물 정리
       if(av.nameLabelEl) av.nameLabelEl.remove();
       if(av.nickname) usedNicknames.delete(av.nickname);
       remoteAvatars.delete(id);
