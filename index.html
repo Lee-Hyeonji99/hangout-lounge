@@ -36,6 +36,27 @@
     #hint{font-size:12px;max-width:none;padding:6px 9px}
     #netPanel{font-size:12px;min-width:0;width:100%;padding:8px 10px}
   }
+
+  /* ---- 닉네임 입장 게이트(docs/PLAN.md 6-a) ---- */
+  #nameGate{position:fixed;inset:0;background:#000c;display:flex;
+    align-items:center;justify-content:center;z-index:10}
+  #nameGate[hidden]{display:none}
+  #nameGateBox{background:#1c1c22;border:1px solid #445;border-radius:12px;
+    padding:22px 26px;display:flex;flex-direction:column;gap:10px;min-width:240px}
+  #nameGateBox label{font-size:13px;color:#bbb}
+  #nameGateBox input{font:inherit;font-size:15px;padding:8px 10px;border-radius:6px;
+    border:1px solid #555;background:#222;color:#eee}
+  #nameGateBox button{font:inherit;padding:8px 10px;border-radius:6px;border:1px solid #567;
+    background:#234;color:#cde;cursor:pointer}
+  #nameGateBox button:hover{background:#345}
+
+  #nicknameDisplay{color:#fd8}
+  #changeNicknameBtn{font-size:11px;padding:2px 7px !important}
+
+  /* ---- 아바타 머리 위 닉네임 라벨 ---- */
+  #labelLayer{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+  .nameLabel{position:absolute;left:0;top:0;background:#0009;color:#fff;
+    font-size:12px;padding:2px 7px;border-radius:6px;white-space:nowrap}
 </style>
 <script type="importmap">
 { "imports": { "three": "./lib/vendor/three/build/three.module.js" } }
@@ -49,6 +70,8 @@
   오른쪽 패널에서 상대 ID로.</div>
 <div id="netPanel">
   내 ID: <span id="myId">연결 중…</span>
+  <div>닉네임: <span id="nicknameDisplay"></span>
+    <button id="changeNicknameBtn">변경</button></div>
   <div id="roomInfo">방 배정 중…</div>
   <input id="remoteIdInput" placeholder="상대 ID 붙여넣기(수동)">
   <button id="connectBtn">연결</button>
@@ -56,6 +79,15 @@
 </div>
 </div>
 <div id="joystick" hidden><div id="joystickKnob"></div></div>
+<div id="labelLayer"></div>
+
+<div id="nameGate" hidden>
+  <div id="nameGateBox">
+    <label for="nicknameInput">닉네임을 입력하세요</label>
+    <input id="nicknameInput" maxlength="16" placeholder="예: 민지">
+    <button id="nicknameSubmit">입장</button>
+  </div>
+</div>
 <script type="module">
 import * as THREE from 'three';
 import { createMesh } from './lib/webrtc-mesh.js';
@@ -70,6 +102,46 @@ import { createMesh } from './lib/webrtc-mesh.js';
    지금은 프로토타입이라 한 DataConnection(기본 reliable 채널)에 둘 다
    실어 보낸다 — "unreliable 채널로 더 가볍게"는 나중 최적화 대상.
    ============================================================ */
+
+/* ---- 닉네임 입장 게이트(docs/PLAN.md 6-a) ----
+   서버 저장 없이 localStorage에만 남긴다 — 인증이 아니라 "화면에 이름
+   표시"가 목적이라 이 정도로 충분하다는 결론. */
+const NICKNAME_STORAGE_KEY = 'hangout-lounge:nickname';
+function loadSavedNickname(){
+  try { return localStorage.getItem(NICKNAME_STORAGE_KEY) || ''; }
+  catch { return ''; } // 프라이빗 모드 등에서 localStorage가 막혀있을 수 있음
+}
+function saveNickname(name){
+  try { localStorage.setItem(NICKNAME_STORAGE_KEY, name); } catch {}
+}
+
+function promptNickname(defaultValue){
+  return new Promise((resolve)=>{
+    const gate = document.getElementById('nameGate');
+    const input = document.getElementById('nicknameInput');
+    const btn = document.getElementById('nicknameSubmit');
+    input.value = defaultValue || '';
+    gate.hidden = false;
+    input.focus();
+    function submit(){
+      const name = input.value.trim().slice(0,16) || '손님';
+      btn.removeEventListener('click', submit);
+      input.removeEventListener('keydown', onKey);
+      gate.hidden = true;
+      saveNickname(name);
+      resolve(name);
+    }
+    function onKey(e){ if(e.key==='Enter') submit(); }
+    btn.addEventListener('click', submit);
+    input.addEventListener('keydown', onKey);
+  });
+}
+
+async function getNickname(){
+  const saved = loadSavedNickname();
+  if(saved) return saved;
+  return promptNickname('');
+}
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -228,10 +300,33 @@ async function spawnAvatar(){
    조용히 실행 안 되는 버그를 실제로 겪었다(이벤트 리스너 등록까지 전부
    증발 — "시작 버튼이 안 눌린다"는 신고로 발견). try/catch 로 감싸서 같은
    사고가 재발하지 않게 한다. */
-async function main(){
+async function main(myNickname){
+
+/* ---- 아바타 머리 위 닉네임 라벨 ----
+   CSS2DRenderer 같은 별도 three.js 애드온을 안 쓰고, 3D 좌표를 화면
+   좌표로 직접 projection해서 평범한 절대 위치 div를 그 자리에 둔다. */
+const labelLayerEl = document.getElementById('labelLayer');
+function createNameLabel(text){
+  const el = document.createElement('div');
+  el.className = 'nameLabel';
+  el.textContent = text;
+  labelLayerEl.appendChild(el);
+  return el;
+}
+const labelProjectVec = new THREE.Vector3();
+function updateLabelPosition(labelEl, model){
+  labelProjectVec.set(model.position.x, model.position.y+1.05, model.position.z);
+  labelProjectVec.project(camera);
+  if(labelProjectVec.z > 1){ labelEl.style.display = 'none'; return; }
+  labelEl.style.display = '';
+  const x = (labelProjectVec.x*0.5+0.5) * innerWidth;
+  const y = (1-(labelProjectVec.y*0.5+0.5)) * innerHeight;
+  labelEl.style.transform = `translate(-50%,-100%) translate(${x}px,${y}px)`;
+}
 
 /* ---- 내 아바타 + WASD 이동 ---- */
 const me = await spawnAvatar();
+me.nameLabelEl = createNameLabel(myNickname);
 const keys = {KeyW:false,KeyA:false,KeyS:false,KeyD:false};
 addEventListener('keydown', e=>{ if(e.code in keys) keys[e.code]=true; });
 addEventListener('keyup',   e=>{ if(e.code in keys) keys[e.code]=false; });
@@ -299,7 +394,38 @@ function updateCamera(){
    docs/PLAN.md 3-a. */
 const myIdEl = document.getElementById('myId');
 const peerListEl = document.getElementById('peerList');
-const remoteAvatars = new Map(); // peerId -> {model, mixer, playState, targetPos, targetYaw}
+const nicknameDisplayEl = document.getElementById('nicknameDisplay');
+const remoteAvatars = new Map(); // peerId -> {model, mixer, playState, targetPos, targetYaw, nameLabelEl}
+
+/* ---- 닉네임 ----
+   서버가 없어서 "먼저 자리 잡은 사람이 원래 이름을 쓴다"는 순서를 엄밀히
+   보장은 못 한다(docs/PLAN.md 6-a에 적어둔 대로 이 프로젝트는 그 정도
+   관대함을 기본값으로 한다) — 같은 방에서 남의 닉네임과 겹치는 걸 알게 되면
+   그때 내 쪽에 "(2)"류 숫자를 붙여 재조정하고 새 이름을 다시 알린다. */
+nicknameDisplayEl.textContent = myNickname; // myNickname은 main(myNickname) 파라미터
+const usedNicknames = new Set(); // 남들이 쓰고 있는 걸로 확인된 닉네임
+
+function renameMyNickname(newName){
+  myNickname = newName;
+  nicknameDisplayEl.textContent = myNickname;
+  saveNickname(myNickname);
+  if(me.nameLabelEl) me.nameLabelEl.textContent = myNickname;
+  mesh.broadcast({type:'nickname', name: myNickname});
+}
+
+function resolveNicknameCollision(){
+  if(!usedNicknames.has(myNickname)) return;
+  let n = 2;
+  while(usedNicknames.has(`${myNickname}(${n})`)) n++;
+  renameMyNickname(`${myNickname}(${n})`);
+}
+
+document.getElementById('changeNicknameBtn').addEventListener('click', async ()=>{
+  const name = await promptNickname(myNickname);
+  usedNicknames.delete(myNickname);
+  renameMyNickname(name);
+  resolveNicknameCollision();
+});
 
 const mesh = createMesh({
   onPeerJoin: async (id)=>{
@@ -307,12 +433,20 @@ const mesh = createMesh({
     if(!remoteAvatars.has(id)){
       const av = await spawnAvatar();
       av.model.position.set(0,0,0);
+      av.nameLabelEl = createNameLabel('…');
       remoteAvatars.set(id, {...av, targetPos:av.model.position.clone(), targetYaw:0});
     }
+    // 새로 연결된 상대에게(그리고 김에 기존 상대들에게도) 내 닉네임을 알린다.
+    mesh.broadcast({type:'nickname', name: myNickname});
   },
   onPeerLeave: (id)=>{
     const av = remoteAvatars.get(id);
-    if(av){ scene.remove(av.model); remoteAvatars.delete(id); }
+    if(av){
+      scene.remove(av.model);
+      if(av.nameLabelEl) av.nameLabelEl.remove();
+      if(av.nickname) usedNicknames.delete(av.nickname);
+      remoteAvatars.delete(id);
+    }
     updatePeerList();
   },
   onData: (fromId, msg)=>{
@@ -323,6 +457,12 @@ const mesh = createMesh({
       av.targetYaw = msg.yaw;
     } else if(msg.type==='state'){
       av.playState(msg.state);
+    } else if(msg.type==='nickname'){
+      if(av.nickname) usedNicknames.delete(av.nickname);
+      av.nickname = msg.name;
+      usedNicknames.add(msg.name);
+      if(av.nameLabelEl) av.nameLabelEl.textContent = msg.name;
+      resolveNicknameCollision();
     }
   },
 });
@@ -433,6 +573,9 @@ function frame(now){
   me.mixer.update(dt);
   remoteAvatars.forEach(av=>av.mixer.update(dt));
 
+  updateLabelPosition(me.nameLabelEl, me.model);
+  remoteAvatars.forEach(av=>{ if(av.nameLabelEl) updateLabelPosition(av.nameLabelEl, av.model); });
+
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
@@ -445,7 +588,7 @@ addEventListener('resize', ()=>{
 
 } // main() 끝
 
-main().catch(err=>{
+getNickname().then(main).catch(err=>{
   console.error('[hangout-lounge] 초기화 실패:', err);
   document.getElementById('hint').textContent =
     '초기화 실패 — 콘솔 확인. (' + err.message + ')';
