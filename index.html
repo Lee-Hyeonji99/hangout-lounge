@@ -15,6 +15,16 @@
     background:#0009;border:1px solid #567;color:#cde;font-size:15px;
     cursor:pointer;display:flex;align-items:center;justify-content:center}
   #hintToggleBtn:hover{background:#234}
+  /* ---- 연결 상태 불안정 신호 아이콘(끊김 신호에 사선, 깜빡임) ----
+     인터넷 자체가 끊겼거나(navigator.onLine) 연결된 상대로부터 한동안
+     데이터가 안 와서(아래 STALE_PEER_TIMEOUT보다 짧은 경고 임계값) 곧
+     끊길 것 같을 때만 나타난다 — 평소엔 아예 안 보임([hidden] 기본). */
+  #connWarnIcon{width:32px;height:32px;border-radius:50%;flex-shrink:0;
+    background:#5a1f1fcc;border:1px solid #d66;color:#fbb;
+    display:flex;align-items:center;justify-content:center;
+    animation:connWarnBlink 1.1s ease-in-out infinite}
+  #connWarnIcon[hidden]{display:none}
+  @keyframes connWarnBlink{0%,100%{opacity:1}50%{opacity:0.35}}
   #hint{font-size:13px;color:#bbb;
     background:#0008;padding:8px 12px;border-radius:8px;pointer-events:none;max-width:420px;
     transition:opacity 0.3s,transform 0.3s}
@@ -158,7 +168,16 @@
 <body>
 <div id="topBar">
 <button id="hintToggleBtn" title="조작법">?</button>
-<div id="hint">WASD 또는 왼쪽 아래 조이스틱으로 이동, 벤치를 클릭/탭하면 앉는다.
+<div id="connWarnIcon" title="연결 상태가 불안정합니다" hidden>
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 8.82a15 15 0 0 1 20 0"></path>
+    <path d="M5 12.86a10 10 0 0 1 14 0"></path>
+    <path d="M8.5 16.9a5 5 0 0 1 7 0"></path>
+    <line x1="12" y1="20" x2="12.01" y2="20"></line>
+    <line x1="1" y1="1" x2="23" y2="23"></line>
+  </svg>
+</div>
+<div id="hint" class="collapsed">WASD 또는 왼쪽 아래 조이스틱으로 이동, 벤치를 클릭/탭하면 앉는다.
   오른쪽 아래 버튼(또는 F)으로 담배 피기 — 둘 다 움직이면 자동으로 풀린다.
   접속하면 매칭 서버가 빈 방에 자동으로 넣어준다.</div>
 <button id="netPanelToggleBtn" title="메뉴">
@@ -628,9 +647,15 @@ function buildStool(){
   leg.position.y = 0.2;
   group.add(leg);
   group.userData.collider = { halfW:0.22, halfD:0.22 };
+  // 1인용 좌석 — 스툴 자체가 앉는 자리(벤치의 seatOffsets와 같은 방식,
+  // benchSeatWorld/benchSeatYaw가 그대로 재사용됨). 몸을 향하게 할 실제
+  // yaw는 테이블 쪽을 봐야 해서 배치 시점(placeCafeTable)에 계산해 넣는다.
+  group.userData.seatOffsets = [ new THREE.Vector3(0, 0.42, 0) ];
+  group.userData.seatYaw = 0;
   return group;
 }
-const cafeProps = []; // 테이블/스툴 — 장식+콜리전만, 앉기 기능은 벤치만 지원(스코프 상)
+const cafeProps = []; // 테이블/스툴 — 콜리전용(테이블은 못 앉음)
+const stools = []; // 스툴만 따로 — 벤치처럼 클릭해서 앉을 수 있음(버그로 제보돼 추가)
 function placeCafeTable(x, z){
   const table = buildCafeTable();
   table.position.set(x, 0, z);
@@ -639,8 +664,12 @@ function placeCafeTable(x, z){
   [[-0.65,0],[0.65,0],[0,-0.65],[0,0.65]].forEach(([dx,dz])=>{
     const stool = buildStool();
     stool.position.set(x+dx, 0, z+dz);
+    // 스툴에 앉으면 테이블 쪽(=오프셋의 반대 방향)을 보게.
+    const facing = new THREE.Vector3(-dx, 0, -dz);
+    stool.userData.seatYaw = Math.atan2(facing.x, facing.z);
     scene.add(stool);
     cafeProps.push(stool);
+    stools.push(stool);
   });
 }
 
@@ -1269,13 +1298,14 @@ document.getElementById('netPanelToggleBtn').addEventListener('click', ()=>{
   document.getElementById('netPanel').classList.toggle('open');
 });
 
-// 상단 조작법 안내도 항상 떠 있으면 거슬린다는 피드백 — 잠깐 보여주고
-// 자동으로 접은 뒤 "?" 아이콘만 남긴다. 언제든 눌러서 다시 펼칠 수 있음.
+// 상단 조작법 안내도 항상 떠 있으면 거슬린다는 피드백 — 처음 접속했을 때부터
+// 무조건 접힌 상태로 시작한다(HTML에 class="collapsed" 고정, 예전엔 6초간
+// 펼쳐뒀다가 접었는데 그마저도 거슬린다는 추가 제보로 아예 안 보여주는 걸로
+// 변경). "?" 아이콘을 눌러서 언제든 펼쳐볼 수 있음.
 const hintEl = document.getElementById('hint');
 document.getElementById('hintToggleBtn').addEventListener('click', ()=>{
   hintEl.classList.toggle('collapsed');
 });
-setTimeout(()=> hintEl.classList.add('collapsed'), 6000);
 
 const chatInputEl = document.getElementById('chatInput');
 chatInputEl.addEventListener('keydown', (e)=>{
@@ -1453,7 +1483,11 @@ function isSeatOccupied(seatWorldPos){
 const MAX_SIT_TRIGGER_DIST = 2.2; // 이 거리보다 멀면 클릭해도 무시(먼 벤치로 끌려가는 게 어색해서)
 
 function sitOnBench(bench, preferredSeat){
-  const order = preferredSeat===1 ? [1,0] : [0,1];
+  // 스툴처럼 좌석이 하나뿐인 소품은 순서를 따질 게 없다(둘 다 고르면
+  // seatOffsets[1]이 없어서 에러남) — 좌석 개수만큼만 순서를 만든다.
+  const order = bench.userData.seatOffsets.length > 1
+    ? (preferredSeat===1 ? [1,0] : [0,1])
+    : [0];
   let seatIndex = null;
   for(const idx of order){
     if(!isSeatOccupied(benchSeatWorld(bench, idx))){ seatIndex = idx; break; }
@@ -1479,11 +1513,15 @@ renderer.domElement.addEventListener('click', (e)=>{
   pointerNDC.x = (e.clientX/innerWidth)*2 - 1;
   pointerNDC.y = -(e.clientY/innerHeight)*2 + 1;
   raycaster.setFromCamera(pointerNDC, camera);
-  const hits = raycaster.intersectObjects(benches, true);
+  // 앉을 수 있는 소품 = 벤치 + 카페 스툴("테이블 의자가 있는데 앉을 수
+  // 없다"는 제보로 스툴도 포함시킴). 테이블 자체는 seatOffsets가 없어서
+  // 원래부터 대상에서 빠짐.
+  const sittables = [...benches, ...stools];
+  const hits = raycaster.intersectObjects(sittables, true);
   if(!hits.length) return;
   let obj = hits[0].object;
-  while(obj.parent && !benches.includes(obj)) obj = obj.parent;
-  if(!benches.includes(obj)) return;
+  while(obj.parent && !sittables.includes(obj)) obj = obj.parent;
+  if(!sittables.includes(obj)) return;
   const localHit = hits[0].point.clone().sub(obj.position);
   localHit.applyAxisAngle(new THREE.Vector3(0,1,0), -obj.rotation.y);
   sitOnBench(obj, localHit.x < 0 ? 0 : 1);
@@ -1753,11 +1791,32 @@ function updatePeerList(){
    경우가 있다. 위치는 초당 ~10회 오는 게 정상이니, 한동안(6초) 아무 메시지도
    안 오면 죽은 걸로 보고 우리 쪽에서 먼저 연결을 끊어버린다. */
 const STALE_PEER_TIMEOUT = 6000;
+// 실제로 끊기기(STALE_PEER_TIMEOUT) 전에 미리 "곧 끊길 것 같다"를
+// 보여주는 경고 임계값 — 사용자가 "누구는 연결되고 누구는 안 되는데
+// 왜그런거야"라고 물어본 것에 대응: 원인 자체(NAT 종류에 따라 P2P 직접
+// 연결이 실패하는 경우가 있음, STUN만 쓰고 TURN 중계 서버는 아직 없어서
+// 완전히 못 뚫는 조합이 존재함 — docs/PLAN.md 3-b)를 UI로 해결할 순
+// 없지만, 적어도 "지금 연결이 불안정하다"는 신호는 보여준다.
+const CONN_WARN_TIMEOUT = 2500;
+const connWarnIconEl = document.getElementById('connWarnIcon');
+function updateConnWarnIcon(){
+  let bad = !navigator.onLine;
+  if(!bad){
+    const now = performance.now();
+    for(const av of remoteAvatars.values()){
+      if(now - av.lastMsgAt > CONN_WARN_TIMEOUT){ bad = true; break; }
+    }
+  }
+  connWarnIconEl.hidden = !bad;
+}
+addEventListener('online', updateConnWarnIcon);
+addEventListener('offline', updateConnWarnIcon);
 setInterval(()=>{
   const now = performance.now();
   for(const [id, av] of remoteAvatars){
     if(now - av.lastMsgAt > STALE_PEER_TIMEOUT) mesh.disconnect(id);
   }
+  updateConnWarnIcon();
 }, 2000);
 
 /* ---- 방 자동 배정(오토 인스턴싱, docs/PLAN.md 6번) ----
