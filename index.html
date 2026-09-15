@@ -1337,10 +1337,19 @@ function updateMyAvatar(dt){
     return;
   }
 
+  // 이동 입력은 항상 "카메라 기준"으로 회전시킨다(고정된 월드 좌표축이
+  // 아니라) — 안 그러면 벤치에 앉았다 일어나는 등 카메라를 돌려서 보는
+  // 상황(특히 벤치는 캐릭터 정면을 보려고 카메라를 반대편으로 돌리게
+  // 됨) 이후 화면상 "앞"과 실제 W 이동 방향이 반대로 느껴지는 버그가
+  // 생긴다(제보됨). camYaw=0(초기 카메라 각도)일 때는 기존 월드축
+  // 매핑과 동일해서 다른 동작엔 영향 없음.
+  const inputX = (keys.KeyD?1:0)-(keys.KeyA?1:0) + joyVec.x;
+  const inputZ = (keys.KeyS?1:0)-(keys.KeyW?1:0) + joyVec.y;
+  const cy = Math.cos(camYaw), sy = Math.sin(camYaw);
   moveDir.set(
-    (keys.KeyD?1:0)-(keys.KeyA?1:0) + joyVec.x,
+    inputX*cy + inputZ*sy,
     0,
-    (keys.KeyS?1:0)-(keys.KeyW?1:0) + joyVec.y
+    -inputX*sy + inputZ*cy
   );
   const moving = moveDir.lengthSq()>0.01;
   if(specialState){
