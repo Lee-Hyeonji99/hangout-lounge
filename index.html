@@ -623,6 +623,26 @@ placeBench(2, -3, Math.PI*0.5);
 
 colliders.push(...benches, ...trees, ...cafeProps);
 
+/* ---- 담배 연기용 부드러운 원형 스프라이트 텍스처 ----
+   구체 메시 대신 항상 카메라를 향하는 스프라이트(빌보드) + 가장자리가
+   부드럽게 옅어지는 방사형 그라데이션 텍스처를 쓰면 훨씬 "뿌연" 느낌이
+   난다. 외부 이미지 파일 없이 캔버스에 직접 그려서 한 번만 만들고(모든
+   아바타/입자가 이 텍스처 하나를 공유) 재사용한다. */
+function makeSmokeTexture(){
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+  grad.addColorStop(0,   'rgba(255,255,255,0.85)');
+  grad.addColorStop(0.4, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(1,   'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(canvas);
+}
+const SMOKE_TEXTURE = makeSmokeTexture();
+
 /* ---- 아바타: 귀여운 햄스터(프리미티브 조립) ----
    외부 에셋/저장소에 의존하지 않기 위해 glTF 로드 대신 Three.js 기본
    도형만 조합해서 만든다. 팔레트는 ART_STYLE 규칙대로 고정 색만 쓴다
@@ -1021,16 +1041,27 @@ async function spawnAvatar(appearance){
         parts.cigaretteTipLocal.scale.setScalar(1 + (1-igniteT)*1.8);
         parts.cigaretteTipLocal.material.color.copy(igniteColor).lerp(emberColor, igniteT);
         smokeEmitAcc += dt;
-        if(smokeEmitAcc > 0.5){
+        if(smokeEmitAcc > 0.35){
           smokeEmitAcc = 0;
           parts.cigaretteTipLocal.getWorldPosition(smokeWorldPos);
-          const p = new THREE.Mesh(
-            new THREE.SphereGeometry(0.02, 6, 6),
-            new THREE.MeshBasicMaterial({color:0xdddddd, transparent:true, opacity:0.5})
-          );
-          p.position.copy(smokeWorldPos);
-          scene.add(p);
-          smokeParticles.push({mesh:p, age:0, life:1.6});
+          // 구체 대신 항상 카메라를 보는 스프라이트 + 부드러운 원형
+          // 그라데이션(SMOKE_TEXTURE)이라 훨씬 뿌옇고 사실적으로 보인다.
+          const mat = new THREE.SpriteMaterial({
+            map: SMOKE_TEXTURE, color: 0xe8e8e4, transparent: true,
+            opacity: 0.55, depthWrite: false,
+          });
+          const sprite = new THREE.Sprite(mat);
+          sprite.position.copy(smokeWorldPos);
+          sprite.position.x += (Math.random()-0.5)*0.03;
+          sprite.position.z += (Math.random()-0.5)*0.03;
+          const baseScale = 0.1 + Math.random()*0.05;
+          sprite.scale.setScalar(baseScale);
+          scene.add(sprite);
+          smokeParticles.push({
+            mesh: sprite, age: 0, life: 1.8 + Math.random()*0.9, baseScale,
+            driftX: (Math.random()-0.5)*0.05, // 매번 조금씩 다른 방향으로 흩어지게
+            driftZ: (Math.random()-0.5)*0.05,
+          });
         }
       }
       for(let i=smokeParticles.length-1; i>=0; i--){
@@ -1039,15 +1070,15 @@ async function spawnAvatar(appearance){
         const t01 = sp.age/sp.life;
         if(t01 >= 1){
           scene.remove(sp.mesh);
-          sp.mesh.geometry.dispose();
-          sp.mesh.material.dispose();
+          sp.mesh.material.dispose(); // 스프라이트 지오메트리는 THREE 내부 공유분이라 따로 dispose 안 함
           smokeParticles.splice(i,1);
           continue;
         }
-        sp.mesh.position.y += dt*0.35;
-        sp.mesh.position.x += Math.sin(sp.age*3)*dt*0.05;
-        sp.mesh.scale.setScalar(1 + t01*2.5);
-        sp.mesh.material.opacity = 0.5*(1-t01);
+        sp.mesh.position.y += dt*(0.22 + t01*0.18); // 위로 갈수록 살짝 더 빨리 퍼짐
+        sp.mesh.position.x += sp.driftX*dt;
+        sp.mesh.position.z += sp.driftZ*dt;
+        sp.mesh.scale.setScalar(sp.baseScale * (1 + t01*7)); // 뭉게뭉게 훨씬 크게 퍼짐
+        sp.mesh.material.opacity = 0.55 * (1-t01) * (1-t01); // 제곱 감쇠라 끝에서 더 빨리 옅어짐
       }
 
       parts.feet.forEach((f,i)=>{
@@ -1080,8 +1111,7 @@ async function spawnAvatar(appearance){
   function dispose(){
     smokeParticles.forEach(sp=>{
       scene.remove(sp.mesh);
-      sp.mesh.geometry.dispose();
-      sp.mesh.material.dispose();
+      sp.mesh.material.dispose(); // 스프라이트 지오메트리는 THREE 내부 공유분이라 안 건드림
     });
     smokeParticles.length = 0;
   }
@@ -1462,8 +1492,19 @@ addEventListener('keydown', e=>{ if(!isTypingInField() && e.code === 'KeyE') emo
    각도라 처음 보이는 모습은 그대로다. */
 let camYaw = 0;
 let camPitch = Math.atan2(2.4, 4.2);
-const CAM_DIST = Math.hypot(2.4, 4.2);
 const CAM_PITCH_MIN = 0.15, CAM_PITCH_MAX = 1.3;
+
+// 휠 줌인/줌아웃 — 목표 거리(camDistTarget)만 즉시 바꾸고, 실제 카메라
+// 거리(camDistCurrent)는 매 프레임 그 목표로 부드럽게 따라가게 해서
+// 휠을 굴리는 즉시 훽 튀지 않고 스무스하게 보간되게 한다.
+const CAM_DIST_DEFAULT = Math.hypot(2.4, 4.2);
+const CAM_DIST_MIN = 2.2, CAM_DIST_MAX = 9;
+let camDistTarget = CAM_DIST_DEFAULT;
+let camDistCurrent = CAM_DIST_DEFAULT;
+renderer.domElement.addEventListener('wheel', (e)=>{
+  e.preventDefault();
+  camDistTarget = Math.min(CAM_DIST_MAX, Math.max(CAM_DIST_MIN, camDistTarget + e.deltaY*0.01));
+}, {passive:false});
 
 let dragPointerId = null;
 let dragLastX = 0, dragLastY = 0;
@@ -1487,9 +1528,10 @@ renderer.domElement.addEventListener('pointermove', e=>{
 renderer.domElement.addEventListener('pointerup', e=>{ if(e.pointerId===dragPointerId) dragPointerId=null; });
 renderer.domElement.addEventListener('pointercancel', e=>{ if(e.pointerId===dragPointerId) dragPointerId=null; });
 
-function updateCamera(){
-  const horizR = CAM_DIST * Math.cos(camPitch);
-  const y = CAM_DIST * Math.sin(camPitch);
+function updateCamera(dt){
+  camDistCurrent += (camDistTarget - camDistCurrent) * Math.min(1, dt*6);
+  const horizR = camDistCurrent * Math.cos(camPitch);
+  const y = camDistCurrent * Math.sin(camPitch);
   camera.position.set(
     me.model.position.x + horizR * Math.sin(camYaw),
     me.model.position.y + y,
@@ -1737,7 +1779,7 @@ function frame(now){
 
   updateMyAvatar(dt);
   updateRemoteAvatars(dt);
-  updateCamera();
+  updateCamera(dt);
   netSendPosMaybe(dt);
 
   me.mixer.update(dt);
