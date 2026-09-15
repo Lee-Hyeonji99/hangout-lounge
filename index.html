@@ -2,15 +2,18 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>hangout-lounge</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{background:#111;color:#eee;font-family:system-ui,sans-serif;overflow:hidden}
-  #hint{position:absolute;left:14px;top:14px;font-size:13px;color:#bbb;
+  #topBar{position:absolute;left:14px;right:14px;
+    top:calc(14px + env(safe-area-inset-top,0px));
+    display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  #hint{font-size:13px;color:#bbb;
     background:#0008;padding:8px 12px;border-radius:8px;pointer-events:none;max-width:420px}
-  #netPanel{position:absolute;right:14px;top:14px;font-size:13px;color:#ddd;
+  #netPanel{font-size:13px;color:#ddd;flex-shrink:0;
     background:#0009;padding:10px 12px;border-radius:8px;display:flex;flex-direction:column;gap:6px;min-width:240px}
   #netPanel input{font:inherit;padding:5px 7px;border-radius:5px;border:1px solid #555;background:#222;color:#eee}
   #netPanel button{font:inherit;padding:5px 9px;border-radius:5px;border:1px solid #567;background:#234;color:#cde;cursor:pointer}
@@ -18,6 +21,21 @@
   #myId{font-family:monospace;color:#8fd}
   #roomInfo{font-size:11px;color:#9ab}
   #peerList{font-size:11px;color:#9ab}
+
+  /* ---- 모바일 터치 조이스틱(왼쪽 아래 고정, PC 키보드 입력과 병행 동작) ---- */
+  #joystick{position:absolute;left:24px;
+    bottom:calc(24px + env(safe-area-inset-bottom,0px));
+    width:110px;height:110px;border-radius:50%;
+    background:#0006;border:2px solid #456;touch-action:none;user-select:none}
+  #joystickKnob{position:absolute;left:50%;top:50%;width:46px;height:46px;
+    margin:-23px 0 0 -23px;border-radius:50%;background:#345c;border:2px solid #8ac;
+    pointer-events:none}
+
+  @media (max-width:520px){
+    #topBar{flex-direction:column}
+    #hint{font-size:12px;max-width:none;padding:6px 9px}
+    #netPanel{font-size:12px;min-width:0;width:100%;padding:8px 10px}
+  }
 </style>
 <script type="importmap">
 { "imports": { "three": "./lib/vendor/three/build/three.module.js" } }
@@ -25,9 +43,10 @@
 <script src="./lib/vendor/peerjs/peerjs.min.js"></script>
 </head>
 <body>
-<div id="hint">WASD로 이동(내 아바타는 햄스터) — 접속하면 매칭 서버가 빈 방에
-  자동으로 넣어준다. 수동 연결이 필요하면 오른쪽 패널에서 상대 ID로.
-  docs/PLAN.md 8번 참고.</div>
+<div id="topBar">
+<div id="hint">WASD 또는 왼쪽 아래 조이스틱으로 이동(내 아바타는 햄스터) —
+  접속하면 매칭 서버가 빈 방에 자동으로 넣어준다. 수동 연결이 필요하면
+  오른쪽 패널에서 상대 ID로.</div>
 <div id="netPanel">
   내 ID: <span id="myId">연결 중…</span>
   <div id="roomInfo">방 배정 중…</div>
@@ -35,6 +54,8 @@
   <button id="connectBtn">연결</button>
   <div id="peerList">연결된 상대: 없음</div>
 </div>
+</div>
+<div id="joystick" hidden><div id="joystickKnob"></div></div>
 <script type="module">
 import * as THREE from 'three';
 import { createMesh } from './lib/webrtc-mesh.js';
@@ -215,15 +236,48 @@ const keys = {KeyW:false,KeyA:false,KeyS:false,KeyD:false};
 addEventListener('keydown', e=>{ if(e.code in keys) keys[e.code]=true; });
 addEventListener('keyup',   e=>{ if(e.code in keys) keys[e.code]=false; });
 
+/* ---- 모바일 터치 조이스틱 ----
+   터치 기기에서만 보이게 하고(PC는 기존 WASD 그대로), 값은 keys와 같은
+   좌표계(x: 좌우, z: 전후, 각각 -1~1)로 맞춰서 아래 updateMyAvatar에서
+   키보드 입력과 그냥 더하기만 하면 되게 한다 — 둘 다 동시에 써도 안 꼬임. */
+const joyVec = {x:0, z:0};
+const isTouchDevice = matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 0;
+if(isTouchDevice){
+  const joystickEl = document.getElementById('joystick');
+  const joystickKnob = document.getElementById('joystickKnob');
+  joystickEl.hidden = false;
+  const R = 40; // knob이 움직일 수 있는 최대 반경(px)
+  let activeId = null;
+  function setKnob(dx, dz){ joystickKnob.style.transform = `translate(${dx}px, ${dz}px)`; }
+  function resetJoystick(){ joyVec.x = 0; joyVec.z = 0; setKnob(0,0); activeId = null; }
+  joystickEl.addEventListener('pointerdown', e=>{
+    activeId = e.pointerId;
+    joystickEl.setPointerCapture(activeId);
+  });
+  joystickEl.addEventListener('pointermove', e=>{
+    if(e.pointerId !== activeId) return;
+    const rect = joystickEl.getBoundingClientRect();
+    const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+    let dx = e.clientX - cx, dz = e.clientY - cy;
+    const len = Math.hypot(dx, dz);
+    if(len > R){ dx = dx/len*R; dz = dz/len*R; }
+    setKnob(dx, dz);
+    joyVec.x = dx / R;
+    joyVec.z = dz / R;
+  });
+  joystickEl.addEventListener('pointerup', e=>{ if(e.pointerId===activeId) resetJoystick(); });
+  joystickEl.addEventListener('pointercancel', e=>{ if(e.pointerId===activeId) resetJoystick(); });
+}
+
 const moveDir = new THREE.Vector3();
 let myState = 'Idle';
 function updateMyAvatar(dt){
   moveDir.set(
-    (keys.KeyD?1:0)-(keys.KeyA?1:0),
+    (keys.KeyD?1:0)-(keys.KeyA?1:0) + joyVec.x,
     0,
-    (keys.KeyS?1:0)-(keys.KeyW?1:0)
+    (keys.KeyS?1:0)-(keys.KeyW?1:0) + joyVec.z
   );
-  const moving = moveDir.lengthSq()>0;
+  const moving = moveDir.lengthSq()>0.01;
   if(moving){
     moveDir.normalize();
     me.model.position.addScaledVector(moveDir, dt*2.2);
