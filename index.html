@@ -174,9 +174,9 @@ document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1a1e);
-scene.fog = new THREE.Fog(0x1a1a1e, 10, 30);
+scene.fog = new THREE.Fog(0x1a1a1e, 15, 55); // 맵이 커져서 원래(10,30)보다 멀리 보이게
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 120);
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x333333, 1.2);
 scene.add(hemi);
@@ -185,7 +185,7 @@ key.position.set(3, 6, 4);
 scene.add(key);
 
 const floor = new THREE.Mesh(
-  new THREE.CircleGeometry(8, 32),
+  new THREE.CircleGeometry(24, 48),
   new THREE.MeshStandardMaterial({color:0x2a2a30, roughness:0.9})
 );
 floor.rotation.x = -Math.PI/2;
@@ -194,9 +194,11 @@ scene.add(floor);
 /* ---- 벤치(카페/공원 어느 쪽이든 쓸 수 있는 범용 좌석 소품) ----
    나무 판(좌석+등받이) + 다리 4개, 전부 박스 지오메트리. 팔레트는 햄스터와
    겹치지 않는 나무/금속 톤 몇 가지로 고정(ART_STYLE 1번 — 색 즉석 생성 금지).
-   group.userData.seatOffset/seatYaw로 "앉았을 때 아바타가 있어야 할 자리"를
-   따로 들고 있어서, 벤치를 씬 어디에 놓고 돌려도 앉기 좌표 계산이 그대로
-   맞게 한다. */
+   기본 2인용 — group.userData.seatOffsets(길이 2)/seatYaw로 "앉았을 때
+   아바타가 있어야 할 자리"를 벤치 로컬 좌표로 따로 들고 있어서, 벤치를 씬
+   어디에 놓고 돌려도 앉기 좌표 계산이 그대로 맞게 한다.
+   userData.collider(halfW/halfD)는 아래 resolveCollisions()가 통과
+   막는 용도로 쓰는 벤치 주변 사각 범위(아바타 반경 포함해서 넉넉하게). */
 const BENCH_PALETTE = { wood: 0xb98a55, woodDark: 0x8a6239, metal: 0x53585c };
 
 function buildBench(){
@@ -221,10 +223,14 @@ function buildBench(){
     group.add(leg);
   });
 
-  // 앉을 때 아바타가 있어야 할 자리(벤치 로컬 좌표) — 좌석 위, 등받이 반대쪽을
-  // 보고 앉게 살짝 앞쪽으로.
-  group.userData.seatOffset = new THREE.Vector3(0, 0.42, 0.1);
+  // 2인용 — 좌석 위, 등받이 반대쪽을 보고 앉게 살짝 앞쪽으로, 왼쪽/오른쪽에
+  // 한 자리씩.
+  group.userData.seatOffsets = [
+    new THREE.Vector3(-0.3, 0.42, 0.1),
+    new THREE.Vector3(0.3, 0.42, 0.1),
+  ];
   group.userData.seatYaw = 0;
+  group.userData.collider = { halfW: 0.68, halfD: 0.42 };
 
   return group;
 }
@@ -236,20 +242,155 @@ function placeBench(x, z, rotY){
   bench.rotation.y = rotY;
   scene.add(bench);
   benches.push(bench);
+  return bench;
 }
-// 바닥 원(반지름 8) 안쪽에 세 개를 둘러앉기 좋게 배치.
-placeBench(-3, -3, Math.PI*0.25);
-placeBench(3, -3, -Math.PI*0.25);
-placeBench(0, 4, Math.PI);
 
-function benchSeatWorld(bench){
-  const local = bench.userData.seatOffset.clone();
+function benchSeatWorld(bench, seatIndex){
+  const local = bench.userData.seatOffsets[seatIndex].clone();
   local.applyAxisAngle(new THREE.Vector3(0,1,0), bench.rotation.y);
   return bench.position.clone().add(local);
 }
 function benchSeatYaw(bench){
   return bench.rotation.y + bench.userData.seatYaw;
 }
+
+/* ---- 소품 콜리전(벤치/나무/테이블을 그냥 통과해서 걸어다니던 문제) ----
+   물리엔진 없이, 소품을 로컬 좌표계의 사각형(userData.collider)으로 보고 그
+   안에 들어오면 가장 얕게 파고든 축으로 밀어내는 정도의 단순한 처리. 이
+   프로젝트는 "정밀 물리 동기화 안 함"이 원칙(docs/PLAN.md 1번)이라 이 정도
+   관대함이면 충분하다 — 내 아바타에만 적용하고(각자 클라이언트가 자기
+   위치를 이렇게 보정), 남의 아바타는 보정된 위치가 그대로 네트워크로
+   전달되니 손 안 대도 됨. colliders 배열은 아래에서 벤치/나무/카페 소품을
+   다 만든 뒤 한 번에 채운다. */
+const AVATAR_RADIUS = 0.28;
+const colliders = [];
+function resolveCollisions(pos){
+  for(const obj of colliders){
+    const { halfW, halfD } = obj.userData.collider;
+    const local = pos.clone().sub(obj.position);
+    local.applyAxisAngle(new THREE.Vector3(0,1,0), -obj.rotation.y);
+    const w = halfW + AVATAR_RADIUS, d = halfD + AVATAR_RADIUS;
+    if(Math.abs(local.x) < w && Math.abs(local.z) < d){
+      const penX = w - Math.abs(local.x);
+      const penZ = d - Math.abs(local.z);
+      if(penX < penZ) local.x = Math.sign(local.x || 1) * w;
+      else local.z = Math.sign(local.z || 1) * d;
+      local.applyAxisAngle(new THREE.Vector3(0,1,0), obj.rotation.y);
+      pos.copy(obj.position).add(local);
+    }
+  }
+  return pos;
+}
+
+/* ---- 큰 맵: 공원 존 + 카페 존을 한 맵 안에 ----
+   요청("전부 있는 큰 맵")대로 둘 중 하나를 고르지 않고 이어붙였다 — 왼쪽은
+   공원(잔디 바닥 + 나무 + 벤치), 오른쪽은 카페(실내 톤 바닥 + 테이블/스툴),
+   가운데는 공용 광장(기존 벤치 배치 자리). 팔레트는 벤치와 겹치는 톤은
+   재사용하고(ART_STYLE 1번 — 색 즉석 생성 방지), 존별로 꼭 필요한 색만
+   추가했다. */
+const PARK_PALETTE = { grass: 0x4c7a4a, trunk: 0x6b4a34, leaf: 0x5a9152 };
+const CAFE_PALETTE = { indoorFloor: 0x4a3428 };
+
+function addGroundPatch(x, z, radius, color){
+  const patch = new THREE.Mesh(
+    new THREE.CircleGeometry(radius, 32),
+    new THREE.MeshStandardMaterial({color, roughness:0.9})
+  );
+  patch.rotation.x = -Math.PI/2;
+  patch.position.set(x, 0.01, z); // 베이스 바닥보다 살짝 띄워서 겹침(z-fighting) 방지
+  scene.add(patch);
+}
+
+function buildTree(){
+  const group = new THREE.Group();
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.16, 1.1, 8),
+    new THREE.MeshStandardMaterial({color:PARK_PALETTE.trunk, roughness:0.9})
+  );
+  trunk.position.y = 0.55;
+  group.add(trunk);
+  const leaves = new THREE.Mesh(
+    new THREE.SphereGeometry(0.75, 10, 8),
+    new THREE.MeshStandardMaterial({color:PARK_PALETTE.leaf, roughness:0.85})
+  );
+  leaves.position.y = 1.5;
+  leaves.scale.set(1, 0.9, 1);
+  group.add(leaves);
+  group.userData.collider = { halfW:0.35, halfD:0.35 };
+  return group;
+}
+const trees = [];
+function placeTree(x, z){
+  const tree = buildTree();
+  tree.position.set(x, 0, z);
+  scene.add(tree);
+  trees.push(tree);
+}
+
+function buildCafeTable(){
+  const woodMat = new THREE.MeshStandardMaterial({color:BENCH_PALETTE.wood, roughness:0.7});
+  const metalMat = new THREE.MeshStandardMaterial({color:BENCH_PALETTE.metal, roughness:0.5, metalness:0.4});
+  const group = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.06, 20), woodMat);
+  top.position.y = 0.72;
+  group.add(top);
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 10), metalMat);
+  leg.position.y = 0.35;
+  group.add(leg);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.04, 16), metalMat);
+  base.position.y = 0.03;
+  group.add(base);
+  group.userData.collider = { halfW:0.5, halfD:0.5 };
+  return group;
+}
+function buildStool(){
+  const seatMat = new THREE.MeshStandardMaterial({color:BENCH_PALETTE.woodDark, roughness:0.75});
+  const legMat = new THREE.MeshStandardMaterial({color:BENCH_PALETTE.metal, roughness:0.5, metalness:0.4});
+  const group = new THREE.Group();
+  const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.05, 16), seatMat);
+  seat.position.y = 0.42;
+  group.add(seat);
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.4, 8), legMat);
+  leg.position.y = 0.2;
+  group.add(leg);
+  group.userData.collider = { halfW:0.22, halfD:0.22 };
+  return group;
+}
+const cafeProps = []; // 테이블/스툴 — 장식+콜리전만, 앉기 기능은 벤치만 지원(스코프 상)
+function placeCafeTable(x, z){
+  const table = buildCafeTable();
+  table.position.set(x, 0, z);
+  scene.add(table);
+  cafeProps.push(table);
+  [[-0.65,0],[0.65,0],[0,-0.65],[0,0.65]].forEach(([dx,dz])=>{
+    const stool = buildStool();
+    stool.position.set(x+dx, 0, z+dz);
+    scene.add(stool);
+    cafeProps.push(stool);
+  });
+}
+
+// 공원(왼쪽)
+addGroundPatch(-11, 0, 9, PARK_PALETTE.grass);
+placeTree(-14, -4);
+placeTree(-9, 5);
+placeTree(-15, 4);
+placeTree(-8, -6);
+placeBench(-12, -3, Math.PI*0.15);
+placeBench(-9, 4, -Math.PI*0.7);
+
+// 카페(오른쪽, 실내 톤 바닥)
+addGroundPatch(11, 0, 7, CAFE_PALETTE.indoorFloor);
+placeCafeTable(9, 2);
+placeCafeTable(12, -1);
+placeCafeTable(9, -4);
+placeBench(13, -4, Math.PI);
+
+// 광장(가운데, 공용)
+placeBench(0, 4, Math.PI);
+placeBench(2, -3, Math.PI*0.5);
+
+colliders.push(...benches, ...trees, ...cafeProps);
 
 /* ---- 아바타: 귀여운 햄스터(프리미티브 조립) ----
    외부 에셋/저장소에 의존하지 않기 위해 glTF 로드 대신 Three.js 기본
@@ -551,7 +692,28 @@ function endSpecialState(){
   document.getElementById('smokeBtn').classList.remove('active');
 }
 
+// 벤치까지 걸어가서 앉는 짧은 전환 애니메이션(아래 sitOnBench가 채움) —
+// 텔레포트 대신 실제 걷는 속도로 부드럽게 이동한 다음 앉는다.
+let sitAnim = null; // {fromPos, toPos, toYaw, t, duration}
+
 function updateMyAvatar(dt){
+  if(sitAnim){
+    sitAnim.t += dt;
+    const p = Math.min(1, sitAnim.t / sitAnim.duration);
+    me.model.position.lerpVectors(sitAnim.fromPos, sitAnim.toPos, p);
+    if(p < 1){
+      const dir = sitAnim.toPos.clone().sub(sitAnim.fromPos);
+      if(dir.lengthSq() > 0.0001) me.model.rotation.y = Math.atan2(dir.x, dir.z);
+    } else {
+      me.model.rotation.y = sitAnim.toYaw;
+      sitAnim = null;
+      myState = 'Sit';
+      me.playState('Sit');
+      netSendStateSoon();
+    }
+    return;
+  }
+
   moveDir.set(
     (keys.KeyD?1:0)-(keys.KeyA?1:0) + joyVec.x,
     0,
@@ -564,24 +726,48 @@ function updateMyAvatar(dt){
   }
   if(moving){
     moveDir.normalize();
-    me.model.position.addScaledVector(moveDir, dt*2.2);
+    const candidate = me.model.position.clone().addScaledVector(moveDir, dt*2.2);
+    resolveCollisions(candidate);
+    me.model.position.copy(candidate);
     me.model.rotation.y = Math.atan2(moveDir.x, moveDir.z);
   }
   const nextState = moving ? 'Walk' : 'Idle';
   if(nextState!==myState){ myState=nextState; me.playState(myState); netSendStateSoon(); }
 }
 
-/* ---- 벤치 클릭/탭으로 앉기 ----
+/* ---- 벤치 클릭/탭으로 앉기(2인용, 좌/우 자리 각각 점유 판정) ----
    조이스틱은 #joystick 전용 엘리먼트에서만 포인터를 가로채므로 캔버스
    click과 안 꼬인다. 다시 이동하면 일어난다. */
 const raycaster = new THREE.Raycaster();
 const pointerNDC = new THREE.Vector2();
-function sitOnBench(bench){
-  me.model.position.copy(benchSeatWorld(bench));
-  me.model.rotation.y = benchSeatYaw(bench);
+const SEAT_OCCUPIED_DIST = 0.25;
+
+function isSeatOccupied(seatWorldPos){
+  if(!sitAnim && myState==='Sit' && me.model.position.distanceTo(seatWorldPos) < SEAT_OCCUPIED_DIST) return true;
+  for(const av of remoteAvatars.values()){
+    if(av.currentState==='Sit' && av.model.position.distanceTo(seatWorldPos) < SEAT_OCCUPIED_DIST) return true;
+  }
+  return false;
+}
+
+function sitOnBench(bench, preferredSeat){
+  const order = preferredSeat===1 ? [1,0] : [0,1];
+  let seatIndex = null;
+  for(const idx of order){
+    if(!isSeatOccupied(benchSeatWorld(bench, idx))){ seatIndex = idx; break; }
+  }
+  if(seatIndex===null) return; // 둘 다 차있음 — 그냥 무시
+
+  sitAnim = {
+    fromPos: me.model.position.clone(),
+    toPos: benchSeatWorld(bench, seatIndex),
+    toYaw: benchSeatYaw(bench),
+    t: 0,
+    duration: Math.max(0.2, me.model.position.distanceTo(benchSeatWorld(bench, seatIndex)) / 2.2),
+  };
   specialState = 'Sit';
-  myState = 'Sit';
-  me.playState('Sit');
+  myState = 'Walk'; // 걸어가는 동안은 Walk 포즈로 보이게
+  me.playState('Walk');
   netSendStateSoon();
   document.getElementById('smokeBtn').classList.remove('active'); // 담배 피우다 앉은 경우 버튼 표시 초기화
 }
@@ -593,7 +779,10 @@ renderer.domElement.addEventListener('click', (e)=>{
   if(!hits.length) return;
   let obj = hits[0].object;
   while(obj.parent && !benches.includes(obj)) obj = obj.parent;
-  if(benches.includes(obj)) sitOnBench(obj);
+  if(!benches.includes(obj)) return;
+  const localHit = hits[0].point.clone().sub(obj.position);
+  localHit.applyAxisAngle(new THREE.Vector3(0,1,0), -obj.rotation.y);
+  sitOnBench(obj, localHit.x < 0 ? 0 : 1);
 });
 
 /* ---- 담배 버튼(제자리 토글) ----
@@ -686,6 +875,7 @@ const mesh = createMesh({
       av.targetYaw = msg.yaw;
     } else if(msg.type==='state'){
       av.playState(msg.state);
+      av.currentState = msg.state; // 벤치 좌석 점유 판정에 씀(아래 isSeatOccupied)
     } else if(msg.type==='nickname'){
       if(av.nickname) usedNicknames.delete(av.nickname);
       av.nickname = msg.name;
