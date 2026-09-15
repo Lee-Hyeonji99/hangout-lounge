@@ -44,6 +44,22 @@
   #smokeBtn:hover{background:#234}
   #smokeBtn.active{background:#8a4a2ac0;border-color:#e8703a;color:#fde}
 
+  /* ---- 감정표현 버튼 + 메뉴(가운데 아래) ---- */
+  #emoteBtn{position:absolute;left:50%;transform:translateX(-50%);
+    bottom:calc(24px + env(safe-area-inset-bottom,0px));
+    width:56px;height:56px;border-radius:50%;
+    background:#0006;border:2px solid #456;color:#cde;
+    display:flex;align-items:center;justify-content:center;cursor:pointer}
+  #emoteBtn:hover{background:#234}
+  #emoteMenu{position:absolute;left:50%;transform:translateX(-50%);
+    bottom:calc(24px + 56px + 14px + env(safe-area-inset-bottom,0px));
+    display:flex;gap:8px;background:#0009;padding:8px;border-radius:12px;
+    border:1px solid #456}
+  #emoteMenu[hidden]{display:none}
+  #emoteMenu button{width:42px;height:42px;border-radius:8px;border:1px solid #567;
+    background:#234;color:#cde;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  #emoteMenu button:hover{background:#345}
+
   @media (max-width:520px){
     #topBar{flex-direction:column}
     #hint{font-size:12px;max-width:none;padding:6px 9px}
@@ -94,7 +110,8 @@
   </details>
 </div>
 </div>
-<div id="joystick" hidden><div id="joystickKnob"></div></div><button id="smokeBtn" title="담배 피기(F)">
+<div id="joystick" hidden><div id="joystickKnob"></div></div>
+<button id="smokeBtn" title="담배 피기(F)">
   <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
     <rect x="3" y="12" width="14" height="4" rx="1"></rect>
     <path d="M17 13.2h3"></path>
@@ -102,6 +119,54 @@
     <path d="M18.5 8c0-1.4 1-1.6 1-3s-1-1.6-1-3"></path>
   </svg>
 </button>
+
+<button id="emoteBtn" title="감정표현(E)">
+  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"></circle>
+    <path d="M8.3 14c1 1.3 2.2 2 3.7 2s2.7-.7 3.7-2"></path>
+    <circle cx="9" cy="9.6" r="0.9" fill="currentColor" stroke="none"></circle>
+    <circle cx="15" cy="9.6" r="0.9" fill="currentColor" stroke="none"></circle>
+  </svg>
+</button>
+<div id="emoteMenu" hidden>
+  <button data-emote="Wave" title="손 흔들기">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 21v-7a4 4 0 0 1 8 0v3"></path>
+      <path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12"></path>
+      <path d="M11 12V4.5a1.5 1.5 0 0 1 3 0V12"></path>
+      <path d="M14 12V6a1.5 1.5 0 0 1 3 0v6"></path>
+    </svg>
+  </button>
+  <button data-emote="Clap" title="박수">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 15c-2-1-3-3-2.4-5C4 8 5.5 7 7 7.5"></path>
+      <path d="M18 15c2-1 3-3 2.4-5C19.9 8 18.4 7 17 7.5"></path>
+      <circle cx="12" cy="10" r="3.2"></circle>
+      <path d="M8.5 15.5c1 1.5 2 2.5 3.5 2.5s2.5-1 3.5-2.5"></path>
+    </svg>
+  </button>
+  <button data-emote="Jump" title="폴짝">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 20V10"></path>
+      <path d="M7 14l5-5 5 5"></path>
+      <circle cx="12" cy="5.5" r="1.8"></circle>
+    </svg>
+  </button>
+  <button data-emote="Heart" title="하트">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" stroke="none">
+      <path d="M12 20s-7-4.4-9.3-8.8C1.2 8 2.6 5 5.7 4.6c1.8-.2 3.3.7 4.3 2.2 1-1.5 2.5-2.4 4.3-2.2C17.4 5 18.8 8 21.3 11.2 19 15.6 12 20 12 20z"></path>
+    </svg>
+  </button>
+  <button data-emote="FlipOff" title="뻐큐">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 21v-8"></path>
+      <path d="M6 21v-6a3 3 0 0 1 6 0v3"></path>
+      <path d="M9 13V4.8a1.4 1.4 0 0 1 2.8 0V12"></path>
+      <path d="M14 21v-9a3 3 0 0 0-2-2.8"></path>
+    </svg>
+  </button>
+</div>
+
 <div id="labelLayer"></div>
 
 <div id="nameGate" hidden>
@@ -510,7 +575,55 @@ function buildHamster(){
   cigarette.visible = false;
   headPivot.add(cigarette);
 
-  return { root, bouncePivot, headPivot, earL, earR, feet, cigarette, cigaretteTipLocal: cigTip };
+  // 감정표현용 팔(오른쪽 — 손 흔들기/박수/뻐큐가 이 팔 하나를 재사용하고
+  // 포즈(피벗 회전)와 손가락 표시 여부만 다르게 준다). 평소엔 숨김.
+  const armPivot = new THREE.Group();
+  armPivot.position.set(0.34, 0.5, 0.12);
+  armPivot.visible = false;
+  bouncePivot.add(armPivot);
+  const upperArm = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.055, 0.2, 4, 8),
+    bodyMat
+  );
+  upperArm.rotation.z = Math.PI/2;
+  upperArm.position.x = 0.13;
+  armPivot.add(upperArm);
+  const fist = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), bodyMat);
+  fist.position.x = 0.27;
+  armPivot.add(fist);
+  const finger = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.022, 0.13, 4, 6),
+    bodyMat
+  );
+  finger.position.set(0.27, 0.1, 0);
+  finger.visible = false;
+  armPivot.add(finger);
+
+  // 하트(이모트용) — 머리 위에 작은 구 두 개 + 아래쪽을 뾰족하게 마감해서
+  // 하트 실루엣만 흉내. headPivot이 아니라 bouncePivot에 둬서 고개 숙임
+  // 애니메이션에 안 딸려가게 한다.
+  const heartGroup = new THREE.Group();
+  heartGroup.position.set(0, 1.05, 0.1);
+  heartGroup.visible = false;
+  const heartMat = new THREE.MeshStandardMaterial({color:HAMSTER_PALETTE.cheek, roughness:0.5});
+  const heartL = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), heartMat);
+  heartL.position.set(-0.05, 0, 0);
+  heartGroup.add(heartL);
+  const heartR = heartL.clone();
+  heartR.position.x = 0.05;
+  heartGroup.add(heartR);
+  const heartBottom = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.14, 4), heartMat);
+  heartBottom.rotation.x = Math.PI;
+  heartBottom.rotation.y = Math.PI/4;
+  heartBottom.position.set(0, -0.08, 0);
+  heartGroup.add(heartBottom);
+  bouncePivot.add(heartGroup);
+
+  return {
+    root, bouncePivot, headPivot, earL, earR, feet,
+    cigarette, cigaretteTipLocal: cigTip,
+    armPivot, finger, heartGroup,
+  };
 }
 
 /* 애니메이션 클립이 없으니 THREE.AnimationMixer 대신 상태(state)에 따라
@@ -527,6 +640,7 @@ async function spawnAvatar(){
 
   let state = 'Idle';
   let t = 0;
+  let stateStartT = 0; // Jump/Wave/Clap처럼 "상태로 바뀐 순간부터"의 위상이 필요한 포즈용
 
   /* ---- 담배 연기 파티클 ----
    * 아바타별로 자기 담배 끝(cigaretteTipLocal)에서 주기적으로 작고 옅은
@@ -540,12 +654,21 @@ async function spawnAvatar(){
   const mixer = {
     update(dt){
       t += dt;
+      const localT = t - stateStartT; // 이 상태가 시작된 뒤로 지난 시간
       const walking = state === 'Walk';
       const sitting = state === 'Sit';
       const smoking = state === 'Smoke';
+      const jumping = state === 'Jump';
+      const waving  = state === 'Wave';
+      const clapping = state === 'Clap';
+      const flippingOff = state === 'FlipOff';
+      const heartingE = state === 'Heart';
+      const armEmote = waving || clapping || flippingOff;
+
       const freq = walking ? 9 : (sitting ? 1.4 : 2.2);
-      const amp  = walking ? 0.05 : (sitting ? 0.01 : 0.02);
-      const baseY = sitting ? -SIT_DROP : 0;
+      const amp  = walking ? 0.05 : (sitting ? 0.01 : (jumping ? 0 : 0.02));
+      const jumpHeight = jumping ? Math.sin(Math.min(localT/0.45, 1) * Math.PI) * 0.35 : 0;
+      const baseY = sitting ? -SIT_DROP : jumpHeight;
       parts.bouncePivot.position.y = baseY + Math.abs(Math.sin(t*freq)) * amp;
       const earWiggle = Math.sin(t*(walking?14:3)) * (walking?0.12:0.05);
       parts.earL.rotation.z =  earWiggle;
@@ -553,6 +676,25 @@ async function spawnAvatar(){
       parts.headPivot.rotation.z = Math.sin(t*(walking?9:1.6)) * (walking?0.04:0.03);
       // 앉으면 살짝 고개 숙이고, 담배 물면 살짝 기울인다.
       parts.headPivot.rotation.x = sitting ? 0.12 : (smoking ? 0.05 : 0);
+
+      // 감정표현: 팔(손흔들기/박수/뻐큐 공용) + 하트(머리 위에 둥실).
+      parts.armPivot.visible = armEmote;
+      parts.finger.visible = flippingOff;
+      if(waving){
+        parts.armPivot.rotation.z = 1.15 + Math.sin(localT*10)*0.3; // 옆으로 들고 흔듦(머리에 안 가리게)
+        parts.armPivot.position.x = 0.34;
+      } else if(clapping){
+        parts.armPivot.rotation.z = 0.9;
+        parts.armPivot.position.x = 0.34 - Math.abs(Math.sin(localT*14))*0.1; // 몸 쪽으로 모았다 폈다
+      } else if(flippingOff){
+        parts.armPivot.rotation.z = 1.2;
+        parts.armPivot.position.x = 0.34;
+      }
+      parts.heartGroup.visible = heartingE;
+      if(heartingE){
+        parts.heartGroup.scale.setScalar(1 + Math.sin(localT*6)*0.15);
+        parts.heartGroup.position.y = 1.05 + Math.sin(localT*3)*0.03;
+      }
 
       parts.cigarette.visible = smoking;
       if(smoking){
@@ -602,7 +744,11 @@ async function spawnAvatar(){
       });
     },
   };
-  function playState(name){ state = name; }
+  function playState(name){
+    if(name === state) return;
+    state = name;
+    stateStartT = t;
+  }
   return { model: parts.root, mixer, playState };
 }
 
@@ -805,6 +951,41 @@ function toggleSmoke(){
 }
 smokeBtnEl.addEventListener('click', toggleSmoke);
 addEventListener('keydown', e=>{ if(e.code === 'KeyF') toggleSmoke(); });
+
+/* ---- 감정표현 메뉴 ----
+   버튼(또는 E키)으로 목록을 열고 그중 하나를 고르면 잠깐 재생 후 자동으로
+   Idle로 돌아간다(벤치/담배처럼 "다시 움직이면 풀림"이 아니라 정해진
+   길이만큼만 — 짧은 동작이라 그게 더 자연스럽다). 앉아있는 동안은 다음
+   라운드 과제(아바타 위치가 좌석 높이로 올라가 있어서 서 있는 포즈를
+   겹치면 붕 뜨는 문제가 있음) — 지금은 무시하고, 담배는 피우던 중이면
+   자동으로 끄고 이모트로 넘어간다. */
+const emoteBtnEl = document.getElementById('emoteBtn');
+const emoteMenuEl = document.getElementById('emoteMenu');
+const EMOTE_DURATION = { Wave:1.8, Clap:1.8, Jump:0.9, Heart:1.8, FlipOff:1.8 };
+let emoteTimer = null;
+
+function playEmote(name){
+  emoteMenuEl.hidden = true;
+  if(sitAnim || specialState === 'Sit') return;
+  if(specialState === 'Smoke') endSpecialState();
+  clearTimeout(emoteTimer);
+  // specialState로 등록해야 updateMyAvatar의 "안 움직이면 Idle" 로직이
+  // 매 프레임 덮어쓰지 않는다(Sit/Smoke와 같은 매커니즘 재사용) — 움직이면
+  // endSpecialState가 자동으로 풀어주는 것도 그대로 적용된다.
+  specialState = name;
+  myState = name;
+  me.playState(name);
+  netSendStateSoon();
+  emoteTimer = setTimeout(()=>{
+    if(specialState !== name) return; // 그 사이 이동 등으로 이미 풀렸으면 손대지 않음
+    endSpecialState();
+  }, (EMOTE_DURATION[name] || 1.5) * 1000);
+}
+emoteBtnEl.addEventListener('click', ()=>{ emoteMenuEl.hidden = !emoteMenuEl.hidden; });
+emoteMenuEl.querySelectorAll('button[data-emote]').forEach(btn=>{
+  btn.addEventListener('click', ()=> playEmote(btn.dataset.emote));
+});
+addEventListener('keydown', e=>{ if(e.code === 'KeyE') emoteMenuEl.hidden = !emoteMenuEl.hidden; });
 
 /* ---- 카메라: 아바타를 중심으로 공전(orbit) ----
    기존엔 고정 오프셋(뒤에서 살짝 위)이었는데, 화면(캔버스)을 드래그하면
