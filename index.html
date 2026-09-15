@@ -35,7 +35,7 @@
     margin:-23px 0 0 -23px;border-radius:50%;background:#345c;border:2px solid #8ac;
     pointer-events:none}
 
-  /* ---- 담배 버튼(오른쪽 아래, 조이스틱과 대칭) ---- */
+  /* ---- 담배 버튼(오른쪽 아래, 이동 스틱과 대칭) ---- */
   #smokeBtn{position:absolute;right:24px;
     bottom:calc(24px + env(safe-area-inset-bottom,0px));
     width:56px;height:56px;border-radius:50%;
@@ -94,8 +94,7 @@
   </details>
 </div>
 </div>
-<div id="joystick" hidden><div id="joystickKnob"></div></div>
-<button id="smokeBtn" title="담배 피기(F)">
+<div id="joystick" hidden><div id="joystickKnob"></div></div><button id="smokeBtn" title="담배 피기(F)">
   <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
     <rect x="3" y="12" width="14" height="4" rx="1"></rect>
     <path d="M17 13.2h3"></path>
@@ -643,11 +642,14 @@ const keys = {KeyW:false,KeyA:false,KeyS:false,KeyD:false};
 addEventListener('keydown', e=>{ if(e.code in keys) keys[e.code]=true; });
 addEventListener('keyup',   e=>{ if(e.code in keys) keys[e.code]=false; });
 
-/* ---- 모바일 터치 조이스틱 ----
-   터치 기기에서만 보이게 하고(PC는 기존 WASD 그대로), 값은 keys와 같은
-   좌표계(x: 좌우, z: 전후, 각각 -1~1)로 맞춰서 아래 updateMyAvatar에서
-   키보드 입력과 그냥 더하기만 하면 되게 한다 — 둘 다 동시에 써도 안 꼬임. */
-const joyVec = {x:0, z:0};
+/* ---- 모바일 이동 스틱(왼쪽 아래) ----
+   터치 기기에서만 보이게 하고(PC는 WASD), 값은 keys와 같은 좌표계
+   (x: 좌우, y: 전후, 각각 -1~1)라 아래 updateMyAvatar에서 키보드 입력과
+   그냥 더하기만 하면 된다 — 둘 다 동시에 써도 안 꼬임. 카메라 시야는
+   스틱을 따로 두지 않고, 아래 updateCamera 쪽의 "화면 드래그" 로직을
+   그대로 쓴다(Pointer Events라 마우스든 터치든 같은 코드 — PC와 모바일
+   둘 다 이동 스틱/버튼이 없는 빈 화면을 드래그하면 카메라가 돈다). */
+const joyVec = {x:0, y:0};
 const isTouchDevice = matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 0;
 if(isTouchDevice){
   const joystickEl = document.getElementById('joystick');
@@ -655,8 +657,8 @@ if(isTouchDevice){
   joystickEl.hidden = false;
   const R = 40; // knob이 움직일 수 있는 최대 반경(px)
   let activeId = null;
-  function setKnob(dx, dz){ joystickKnob.style.transform = `translate(${dx}px, ${dz}px)`; }
-  function resetJoystick(){ joyVec.x = 0; joyVec.z = 0; setKnob(0,0); activeId = null; }
+  function setKnob(dx, dy){ joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`; }
+  function resetJoystick(){ joyVec.x = 0; joyVec.y = 0; setKnob(0,0); activeId = null; }
   joystickEl.addEventListener('pointerdown', e=>{
     activeId = e.pointerId;
     joystickEl.setPointerCapture(activeId);
@@ -665,12 +667,12 @@ if(isTouchDevice){
     if(e.pointerId !== activeId) return;
     const rect = joystickEl.getBoundingClientRect();
     const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
-    let dx = e.clientX - cx, dz = e.clientY - cy;
-    const len = Math.hypot(dx, dz);
-    if(len > R){ dx = dx/len*R; dz = dz/len*R; }
-    setKnob(dx, dz);
+    let dx = e.clientX - cx, dy = e.clientY - cy;
+    const len = Math.hypot(dx, dy);
+    if(len > R){ dx = dx/len*R; dy = dy/len*R; }
+    setKnob(dx, dy);
     joyVec.x = dx / R;
-    joyVec.z = dz / R;
+    joyVec.y = dy / R;
   });
   joystickEl.addEventListener('pointerup', e=>{ if(e.pointerId===activeId) resetJoystick(); });
   joystickEl.addEventListener('pointercancel', e=>{ if(e.pointerId===activeId) resetJoystick(); });
@@ -717,7 +719,7 @@ function updateMyAvatar(dt){
   moveDir.set(
     (keys.KeyD?1:0)-(keys.KeyA?1:0) + joyVec.x,
     0,
-    (keys.KeyS?1:0)-(keys.KeyW?1:0) + joyVec.z
+    (keys.KeyS?1:0)-(keys.KeyW?1:0) + joyVec.y
   );
   const moving = moveDir.lengthSq()>0.01;
   if(specialState){
@@ -750,6 +752,8 @@ function isSeatOccupied(seatWorldPos){
   return false;
 }
 
+const MAX_SIT_TRIGGER_DIST = 2.2; // 이 거리보다 멀면 클릭해도 무시(먼 벤치로 끌려가는 게 어색해서)
+
 function sitOnBench(bench, preferredSeat){
   const order = preferredSeat===1 ? [1,0] : [0,1];
   let seatIndex = null;
@@ -757,6 +761,7 @@ function sitOnBench(bench, preferredSeat){
     if(!isSeatOccupied(benchSeatWorld(bench, idx))){ seatIndex = idx; break; }
   }
   if(seatIndex===null) return; // 둘 다 차있음 — 그냥 무시
+  if(me.model.position.distanceTo(benchSeatWorld(bench, seatIndex)) > MAX_SIT_TRIGGER_DIST) return; // 너무 멀면 무시
 
   sitAnim = {
     fromPos: me.model.position.clone(),
@@ -772,6 +777,7 @@ function sitOnBench(bench, preferredSeat){
   document.getElementById('smokeBtn').classList.remove('active'); // 담배 피우다 앉은 경우 버튼 표시 초기화
 }
 renderer.domElement.addEventListener('click', (e)=>{
+  if(dragMoved > 6) return; // 시야를 드래그하느라 움직인 클릭이면 앉기 판정 안 함
   pointerNDC.x = (e.clientX/innerWidth)*2 - 1;
   pointerNDC.y = -(e.clientY/innerHeight)*2 + 1;
   raycaster.setFromCamera(pointerNDC, camera);
@@ -800,10 +806,49 @@ function toggleSmoke(){
 smokeBtnEl.addEventListener('click', toggleSmoke);
 addEventListener('keydown', e=>{ if(e.code === 'KeyF') toggleSmoke(); });
 
-/* ---- 카메라: 내 아바타를 뒤에서 살짝 위에서 따라간다 ---- */
+/* ---- 카메라: 아바타를 중심으로 공전(orbit) ----
+   기존엔 고정 오프셋(뒤에서 살짝 위)이었는데, 화면(캔버스)을 드래그하면
+   카메라가 도는 방식으로 바꿨다 — 마우스든 터치든 Pointer Events라 같은
+   코드로 처리된다(별도 시야 스틱 없이 이동 스틱이 없는 빈 화면 아무 데나
+   드래그하면 된다). FPS류 포인터락이 아니라 "누르고 끄는 동안만" 도는
+   방식(사용자 요청). 짧은 드래그(=클릭/탭)는 벤치 앉기 판정 쪽에서
+   dragMoved로 구분해서 쓴다. 초기값은 원래 오프셋(0, 2.4, 4.2)과 같은
+   각도라 처음 보이는 모습은 그대로다. */
+let camYaw = 0;
+let camPitch = Math.atan2(2.4, 4.2);
+const CAM_DIST = Math.hypot(2.4, 4.2);
+const CAM_PITCH_MIN = 0.15, CAM_PITCH_MAX = 1.3;
+
+let dragPointerId = null;
+let dragLastX = 0, dragLastY = 0;
+let dragMoved = 0;
+const MOUSE_LOOK_SENS = 0.006;
+renderer.domElement.style.touchAction = 'none'; // 드래그 중 브라우저 스크롤/줌 제스처와 충돌 방지
+renderer.domElement.addEventListener('pointerdown', e=>{
+  dragPointerId = e.pointerId;
+  dragLastX = e.clientX; dragLastY = e.clientY;
+  dragMoved = 0;
+  renderer.domElement.setPointerCapture(dragPointerId);
+});
+renderer.domElement.addEventListener('pointermove', e=>{
+  if(e.pointerId !== dragPointerId) return;
+  const dx = e.clientX - dragLastX, dy = e.clientY - dragLastY;
+  dragLastX = e.clientX; dragLastY = e.clientY;
+  dragMoved += Math.hypot(dx, dy);
+  camYaw -= dx * MOUSE_LOOK_SENS;
+  camPitch = Math.min(CAM_PITCH_MAX, Math.max(CAM_PITCH_MIN, camPitch - dy*MOUSE_LOOK_SENS));
+});
+renderer.domElement.addEventListener('pointerup', e=>{ if(e.pointerId===dragPointerId) dragPointerId=null; });
+renderer.domElement.addEventListener('pointercancel', e=>{ if(e.pointerId===dragPointerId) dragPointerId=null; });
+
 function updateCamera(){
-  const back = new THREE.Vector3(0, 2.4, 4.2);
-  camera.position.copy(me.model.position).add(back);
+  const horizR = CAM_DIST * Math.cos(camPitch);
+  const y = CAM_DIST * Math.sin(camPitch);
+  camera.position.set(
+    me.model.position.x + horizR * Math.sin(camYaw),
+    me.model.position.y + y,
+    me.model.position.z + horizR * Math.cos(camYaw)
+  );
   camera.lookAt(me.model.position.x, me.model.position.y+1, me.model.position.z);
 }
 
