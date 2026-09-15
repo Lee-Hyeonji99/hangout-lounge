@@ -106,7 +106,13 @@ module.exports = async function handler(req, res) {
     if (action === 'heartbeat') {
       if (!roomId) { res.status(400).json({ error: 'roomId 필요' }); return; }
       await redis(['HSET', membersKey(roomId), peerId, String(Date.now())]);
-      res.status(200).json({ ok: true });
+      // 방금 살아있다고 갱신만 하고 끝내지 않고, 지금 이 방에 누가 있는지도
+      // 같이 돌려준다 — join 시점에 두 사람이 거의 동시에 들어와서 서로를
+      // 못 보고 지나친 경우(레이스 컨디션)를 하트비트가 주기적으로 다시
+      // 잡아줄 수 있게. index.html 쪽에서 아직 연결 안 된 상대만 골라 다시
+      // connectTo() 시도.
+      const members = await liveMembers(roomId);
+      res.status(200).json({ ok: true, peers: members.filter((id) => id !== peerId) });
       return;
     }
     if (action === 'leave') {

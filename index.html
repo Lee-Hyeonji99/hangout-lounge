@@ -1712,6 +1712,12 @@ function startRoomHeartbeat(){
     fetch('/api/room?action=heartbeat', {
       method:'POST', headers:{'content-type':'application/json'},
       body: JSON.stringify({peerId: mesh.peerId, roomId: myRoomId}),
+    }).then(r=>r.json()).then(({peers})=>{
+      // join 시점에 두 사람이 거의 동시에 들어와서 서로를 못 보고 지나친
+      // 경우(레이스 컨디션)를 여기서 주기적으로 다시 잡는다 — 아직 연결
+      // 안 된 상대만 connectTo()는 mesh 쪽에서 이미 연결돼 있으면 조용히
+      // 무시하니 그냥 다 불러도 안전하다.
+      if(peers) peers.forEach(id=>mesh.connectTo(id));
     }).catch(()=>{}); // 실패해도 다음 하트비트가 또 오니 그냥 넘어간다
   }, 15000);
 
