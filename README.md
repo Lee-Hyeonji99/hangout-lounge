@@ -25,6 +25,20 @@ python3 -m http.server 8000
 자체는 그대로 열리고, 방 자동 배정만 꺼진 채로 수동 "상대 ID 붙여넣기"로
 동작한다(`index.html` 우측 패널).
 
+**버그 리포트를 Jira 이슈로 자동 생성**(`api/bugreport.js`)하려면 Vercel
+프로젝트에 아래 환경변수를 추가해야 한다(Jira API 토큰은 Atlassian 계정
+설정 → 보안 → API 토큰에서 발급):
+
+```
+JIRA_BASE_URL=https://wbg2.atlassian.net
+JIRA_EMAIL=<토큰을 발급한 계정 이메일>
+JIRA_API_TOKEN=<발급한 토큰>
+JIRA_PROJECT_KEY=SCRUM   # 생략 시 기본값 SCRUM
+```
+
+이 환경변수도 안 넣으면(매칭 서버와 같은 방침) 버그 신고 기능만 조용히
+꺼진 채로 사이트는 정상 동작한다.
+
 ## 진행 상태
 
 `docs/PLAN.md`의 "8. 구현 순서" 참고 — 현재 3단계(WebRTC 메시 연결)까지 코드
