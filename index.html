@@ -35,6 +35,15 @@
     margin:-23px 0 0 -23px;border-radius:50%;background:#345c;border:2px solid #8ac;
     pointer-events:none}
 
+  /* ---- 담배 버튼(오른쪽 아래, 조이스틱과 대칭) ---- */
+  #smokeBtn{position:absolute;right:24px;
+    bottom:calc(24px + env(safe-area-inset-bottom,0px));
+    width:56px;height:56px;border-radius:50%;
+    background:#0006;border:2px solid #456;color:#cde;
+    display:flex;align-items:center;justify-content:center;cursor:pointer}
+  #smokeBtn:hover{background:#234}
+  #smokeBtn.active{background:#8a4a2ac0;border-color:#e8703a;color:#fde}
+
   @media (max-width:520px){
     #topBar{flex-direction:column}
     #hint{font-size:12px;max-width:none;padding:6px 9px}
@@ -69,8 +78,9 @@
 </head>
 <body>
 <div id="topBar">
-<div id="hint">WASD 또는 왼쪽 아래 조이스틱으로 이동, 벤치를 클릭/탭하면 앉는다
-  (다시 움직이면 일어남) — 접속하면 매칭 서버가 빈 방에 자동으로 넣어준다.</div>
+<div id="hint">WASD 또는 왼쪽 아래 조이스틱으로 이동, 벤치를 클릭/탭하면 앉는다.
+  오른쪽 아래 버튼(또는 F)으로 담배 피기 — 둘 다 움직이면 자동으로 풀린다.
+  접속하면 매칭 서버가 빈 방에 자동으로 넣어준다.</div>
 <div id="netPanel">
   내 ID: <span id="myId">연결 중…</span>
   <div>닉네임: <span id="nicknameDisplay"></span>
@@ -85,6 +95,14 @@
 </div>
 </div>
 <div id="joystick" hidden><div id="joystickKnob"></div></div>
+<button id="smokeBtn" title="담배 피기(F)">
+  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <rect x="3" y="12" width="14" height="4" rx="1"></rect>
+    <path d="M17 13.2h3"></path>
+    <path d="M15 8c0-1.4 1-1.6 1-3s-1-1.6-1-3"></path>
+    <path d="M18.5 8c0-1.4 1-1.6 1-3s-1-1.6-1-3"></path>
+  </svg>
+</button>
 <div id="labelLayer"></div>
 
 <div id="nameGate" hidden>
@@ -244,6 +262,8 @@ const HAMSTER_PALETTE = {
   cheek:     0xf4a6a6,
   eye:       0x2a1f1a,
   nose:      0x5a3a2a,
+  cigarette:    0xf0ede4,
+  cigaretteTip: 0xe8703a,
 };
 
 function buildHamster(){
@@ -330,7 +350,27 @@ function buildHamster(){
   tail.position.set(0, 0.3, -0.38);
   bouncePivot.add(tail);
 
-  return { root, bouncePivot, headPivot, earL, earR, feet };
+  // 담배(입 옆에 물린 자리 — 팔이 없는 프리미티브 아바타라 "손으로 든다"
+  // 대신 입가에 붙여둔 걸로 대신한다). Smoke 상태일 때만 보이게.
+  const cigarette = new THREE.Group();
+  const cigBody = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.012, 0.16, 6),
+    new THREE.MeshStandardMaterial({color:HAMSTER_PALETTE.cigarette, roughness:0.7})
+  );
+  cigBody.rotation.z = Math.PI/2;
+  cigarette.add(cigBody);
+  const cigTip = new THREE.Mesh(
+    new THREE.SphereGeometry(0.014, 8, 8),
+    new THREE.MeshBasicMaterial({color:HAMSTER_PALETTE.cigaretteTip})
+  );
+  cigTip.position.x = 0.09;
+  cigarette.add(cigTip);
+  cigarette.position.set(0.14, -0.04, 0.26);
+  cigarette.rotation.y = -0.3;
+  cigarette.visible = false;
+  headPivot.add(cigarette);
+
+  return { root, bouncePivot, headPivot, earL, earR, feet, cigarette, cigaretteTipLocal: cigTip };
 }
 
 /* 애니메이션 클립이 없으니 THREE.AnimationMixer 대신 상태(state)에 따라
@@ -347,11 +387,22 @@ async function spawnAvatar(){
 
   let state = 'Idle';
   let t = 0;
+
+  /* ---- 담배 연기 파티클 ----
+   * 아바타별로 자기 담배 끝(cigaretteTipLocal)에서 주기적으로 작고 옅은
+   * 구체를 하나씩 만들어서 위로 흘려보내며 커지고 옅어지다 지운다 —
+   * 별도 파티클 시스템 라이브러리 없이 메시 풀만으로 충분한 수준(1인당
+   * 최대 몇 개뿐이라 12명이 다 피워도 가벼움). */
+  const smokeParticles = [];
+  let smokeEmitAcc = 0;
+  const smokeWorldPos = new THREE.Vector3();
+
   const mixer = {
     update(dt){
       t += dt;
       const walking = state === 'Walk';
       const sitting = state === 'Sit';
+      const smoking = state === 'Smoke';
       const freq = walking ? 9 : (sitting ? 1.4 : 2.2);
       const amp  = walking ? 0.05 : (sitting ? 0.01 : 0.02);
       const baseY = sitting ? -SIT_DROP : 0;
@@ -360,7 +411,41 @@ async function spawnAvatar(){
       parts.earL.rotation.z =  earWiggle;
       parts.earR.rotation.z = -earWiggle;
       parts.headPivot.rotation.z = Math.sin(t*(walking?9:1.6)) * (walking?0.04:0.03);
-      parts.headPivot.rotation.x = sitting ? 0.12 : 0; // 앉으면 살짝 고개 숙임
+      // 앉으면 살짝 고개 숙이고, 담배 물면 살짝 기울인다.
+      parts.headPivot.rotation.x = sitting ? 0.12 : (smoking ? 0.05 : 0);
+
+      parts.cigarette.visible = smoking;
+      if(smoking){
+        smokeEmitAcc += dt;
+        if(smokeEmitAcc > 0.5){
+          smokeEmitAcc = 0;
+          parts.cigaretteTipLocal.getWorldPosition(smokeWorldPos);
+          const p = new THREE.Mesh(
+            new THREE.SphereGeometry(0.02, 6, 6),
+            new THREE.MeshBasicMaterial({color:0xdddddd, transparent:true, opacity:0.5})
+          );
+          p.position.copy(smokeWorldPos);
+          scene.add(p);
+          smokeParticles.push({mesh:p, age:0, life:1.6});
+        }
+      }
+      for(let i=smokeParticles.length-1; i>=0; i--){
+        const sp = smokeParticles[i];
+        sp.age += dt;
+        const t01 = sp.age/sp.life;
+        if(t01 >= 1){
+          scene.remove(sp.mesh);
+          sp.mesh.geometry.dispose();
+          sp.mesh.material.dispose();
+          smokeParticles.splice(i,1);
+          continue;
+        }
+        sp.mesh.position.y += dt*0.35;
+        sp.mesh.position.x += Math.sin(sp.age*3)*dt*0.05;
+        sp.mesh.scale.setScalar(1 + t01*2.5);
+        sp.mesh.material.opacity = 0.5*(1-t01);
+      }
+
       parts.feet.forEach((f,i)=>{
         const isBack = i>=2;
         if(sitting){
@@ -452,14 +537,18 @@ if(isTouchDevice){
 
 const moveDir = new THREE.Vector3();
 let myState = 'Idle';
-let isSitting = false;
+// null | 'Sit' | 'Smoke' — 둘 다 "이동 입력 들어오면 자동으로 풀리는" 같은
+// 규칙을 쓰는 제자리 상태라 하나로 묶는다(네트워크로는 여전히 myState
+// 문자열 하나만 보낸다 — docs/PLAN.md 4번, 한 번에 한 상태만).
+let specialState = null;
 
-function standUp(){
-  if(!isSitting) return;
-  isSitting = false;
+function endSpecialState(){
+  if(!specialState) return;
+  specialState = null;
   myState = 'Idle';
   me.playState('Idle');
   netSendStateSoon();
+  document.getElementById('smokeBtn').classList.remove('active');
 }
 
 function updateMyAvatar(dt){
@@ -469,9 +558,9 @@ function updateMyAvatar(dt){
     (keys.KeyS?1:0)-(keys.KeyW?1:0) + joyVec.z
   );
   const moving = moveDir.lengthSq()>0.01;
-  if(isSitting){
-    if(moving) standUp(); // 이동 입력이 들어오면 자동으로 일어남
-    else return; // 앉아있는 동안은 위치를 그대로 고정
+  if(specialState){
+    if(moving) endSpecialState(); // 이동 입력이 들어오면 자동으로 풀림
+    else return; // 앉아있거나 담배 피우는 동안은 위치를 그대로 고정
   }
   if(moving){
     moveDir.normalize();
@@ -484,16 +573,17 @@ function updateMyAvatar(dt){
 
 /* ---- 벤치 클릭/탭으로 앉기 ----
    조이스틱은 #joystick 전용 엘리먼트에서만 포인터를 가로채므로 캔버스
-   click과 안 꼬인다. 다시 벤치를 클릭하거나 이동하면 일어난다. */
+   click과 안 꼬인다. 다시 이동하면 일어난다. */
 const raycaster = new THREE.Raycaster();
 const pointerNDC = new THREE.Vector2();
 function sitOnBench(bench){
   me.model.position.copy(benchSeatWorld(bench));
   me.model.rotation.y = benchSeatYaw(bench);
-  isSitting = true;
+  specialState = 'Sit';
   myState = 'Sit';
   me.playState('Sit');
   netSendStateSoon();
+  document.getElementById('smokeBtn').classList.remove('active'); // 담배 피우다 앉은 경우 버튼 표시 초기화
 }
 renderer.domElement.addEventListener('click', (e)=>{
   pointerNDC.x = (e.clientX/innerWidth)*2 - 1;
@@ -505,6 +595,21 @@ renderer.domElement.addEventListener('click', (e)=>{
   while(obj.parent && !benches.includes(obj)) obj = obj.parent;
   if(benches.includes(obj)) sitOnBench(obj);
 });
+
+/* ---- 담배 버튼(제자리 토글) ----
+   벤치처럼 씬 안의 오브젝트를 클릭하는 게 아니라 어디서든 바로 피울 수
+   있는 개인 액션이라 UI 버튼(+ 키보드 F)으로 토글한다. */
+const smokeBtnEl = document.getElementById('smokeBtn');
+function toggleSmoke(){
+  if(specialState === 'Smoke'){ endSpecialState(); return; }
+  specialState = 'Smoke';
+  myState = 'Smoke';
+  me.playState('Smoke');
+  netSendStateSoon();
+  smokeBtnEl.classList.add('active');
+}
+smokeBtnEl.addEventListener('click', toggleSmoke);
+addEventListener('keydown', e=>{ if(e.code === 'KeyF') toggleSmoke(); });
 
 /* ---- 카메라: 내 아바타를 뒤에서 살짝 위에서 따라간다 ---- */
 function updateCamera(){
