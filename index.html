@@ -1358,9 +1358,17 @@ const mesh = createMesh({
       av.nameLabelEl = createNameLabel('…');
       remoteAvatars.set(id, {...av, targetPos:av.model.position.clone(), targetYaw:0});
     }
-    // 새로 연결된 상대에게(그리고 김에 기존 상대들에게도) 내 닉네임/외형을 알린다.
+    // 새로 연결된 상대에게(그리고 김에 기존 상대들에게도) 내 닉네임/외형/현재
+    // 상태/위치를 전부 알린다. 예전엔 상태(Sit/Smoke/이모트 등)를 안 보내서
+    // 이미 앉아있는 상태로 있는 사람이 있는 방에 나중에 들어오면 그 사람이
+    // 상태를 바꾸기 전까지는 그냥 서있는 걸로 보이던 문제가 있었다 — "먼저
+    // 있던 사람"과 "나중에 들어온 사람" 사이에 지금 상태를 동기화하는 데
+    // 비대칭이 없어야 한다.
     mesh.broadcast({type:'nickname', name: myNickname});
     mesh.broadcast({type:'appearance', appearance: myAppearance});
+    mesh.broadcast({type:'state', state: myState});
+    mesh.broadcast({type:'pos', x:me.model.position.x, y:me.model.position.y,
+      z:me.model.position.z, yaw:me.model.rotation.y});
   },
   onPeerLeave: (id)=>{
     const av = remoteAvatars.get(id);
