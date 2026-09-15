@@ -1405,6 +1405,13 @@ let specialState = null;
 
 function endSpecialState(){
   if(!specialState) return;
+  // 벤치/스툴에 앉으면 좌석 높이(seatOffsets의 y, 0.42)까지 아바타 루트
+  // 자체를 들어올리는 구조라(sitAnim.toPos), 일어날 때 다시 바닥(y=0,
+  // 이 맵은 굴곡 없이 평평함)으로 되돌려주는 코드가 없었다 — 그래서 일어난
+  // 뒤에도 벤치 높이에 뜬 채로 돌아다니는 버그로 제보됨. Sit/SitSmoke가
+  // 아닌 다른 specialState(Smoke 단독, 이모트)는 애초에 y를 안 건드리니
+  // 그냥 0으로 맞춰도 안전.
+  me.model.position.y = 0;
   specialState = null;
   myState = 'Idle';
   me.playState('Idle');
