@@ -11,15 +11,22 @@
 
    필요한 환경변수(Vercel 프로젝트 설정에 수동으로 추가 — metered.ca 무료
    가입 후 대시보드의 "TURN Server Credentials"에서 확인):
-     METERED_DOMAIN    예) xxx.metered.live
+     METERED_DOMAIN    예) xxx.metered.live ("https://"를 붙여 넣어도
+                        아래에서 알아서 떼어내니 상관없음 — Metered 문서의
+                        예제 코드엔 fetch() URL 전체가 나와서 프로토콜까지
+                        같이 복사해 넣기 쉬움)
      METERED_API_KEY
    둘 다 없으면 이 함수는 501을 돌려주고, 클라이언트는 이를 조용히
    무시한 채 기존처럼 STUN만으로 계속 진행한다(room.js/bugreport.js와
    같은 방침 — 있으면 좋고 없어도 앱은 정상 동작). */
 
 module.exports = async function handler(req, res) {
-  const domain = process.env.METERED_DOMAIN;
-  const apiKey = process.env.METERED_API_KEY;
+  // "https://xxx.metered.live"처럼 프로토콜/슬래시까지 통째로 넣는 경우가
+  // 흔해서(Metered 문서의 예제가 fetch() URL 전체를 보여줌) 방어적으로
+  // 제거한다 — 안 그러면 아래에서 "https://https://..."가 돼서 fetch 자체가
+  // 깨진다(실제로 겪은 문제).
+  const domain = (process.env.METERED_DOMAIN || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  const apiKey = (process.env.METERED_API_KEY || '').trim();
   if (!domain || !apiKey) {
     res.status(501).json({ error: 'TURN 환경변수 없음 — METERED_DOMAIN/METERED_API_KEY 확인' });
     return;
@@ -27,11 +34,14 @@ module.exports = async function handler(req, res) {
 
   try {
     const r = await fetch(`https://${domain}/api/v1/turn/credentials?apiKey=${encodeURIComponent(apiKey)}`);
-    if (!r.ok) throw new Error(`Metered 요청 실패: HTTP ${r.status}`);
+    if (!r.ok) throw new Error(`Metered 요청 실패: HTTP ${r.status} ${await r.text().catch(()=> '')}`);
     const iceServers = await r.json(); // Metered가 WebRTC iceServers 형식 그대로 돌려줌
     res.status(200).json({ iceServers });
   } catch (err) {
     console.error('[api/turn]', err);
-    res.status(500).json({ error: String((err && err.message) || err) });
+    // fetch 실패(TypeError: fetch failed)는 진짜 이유가 err.cause에 있는
+    // 경우가 많아서(DNS 실패 등) 같이 실어 보낸다 — 디버깅용.
+    const detail = err && err.cause ? String(err.cause.message || err.cause) : null;
+    res.status(500).json({ error: String((err && err.message) || err), detail, domainUsed: domain });
   }
 };

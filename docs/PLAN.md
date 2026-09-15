@@ -103,6 +103,20 @@ P2P 직접 연결 자체가 실패한다 — 코드 버그가 아니라 present�
 - `index.html`이 `mesh` 만들기 전에 `/api/turn`을 먼저 fetch해서 받아온
   `iceServers`를 넘겨준다.
 
+**설정 중 겪은 문제 2가지(실사용 트러블슈팅)**:
+1. **Vercel 환경변수를 "Production"에만 등록** → 랜덤 문자열이 붙은
+   배포 주소(예: `hangout-lounge-xxxxx-팀.vercel.app`)는 보통 Preview
+   배포라 Production 전용 변수를 못 읽어서 501 계속 발생. "All
+   Environments"로 바꾸고 재배포해서 해결.
+2. **`METERED_DOMAIN`에 `https://`까지 통째로 넣음** → Metered 문서의
+   예제 코드가 `fetch("https://xxx.metered.live/...")` 형태로 URL
+   전체를 보여줘서, 그걸 그대로 복사해 넣기 쉬운 구조였음(사용자 실수가
+   아니라 UX 함정에 가까움). `api/turn.js`가 `https://` + 입력값을 그대로
+   이어붙이는 구조라 `https://https://...`가 돼서 `fetch failed`로 깨짐.
+   코드를 고쳐서 `METERED_DOMAIN`에 프로토콜/트레일링 슬래시가 있든 없든
+   알아서 정리(`replace(/^https?:\/\//i, '')`)하도록 방어적으로 변경 —
+   이제 어느 쪽으로 넣어도 정상 동작.
+
 ## 4. 상태 동기화 설계
 
 무엇을, 얼마나 자주, 어떤 채널로 보낼지가 네트워크 설계의 핵심.
