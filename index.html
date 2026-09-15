@@ -345,11 +345,19 @@ renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1a1e);
-scene.fog = new THREE.Fog(0x1a1a1e, 15, 55); // 맵이 커져서 원래(10,30)보다 멀리 보이게
+/* ---- 하늘/안개 색 ----
+   "공간이 무섭다(시커멓고 끝없어 보임)"는 피드백 — 배경이 단색 암흑이라
+   지평선이 없어서 어디가 바닥이고 어디가 하늘인지 감이 안 왔던 게 원인으로
+   보인다. SKY_HORIZON을 안개 색과 동일하게 맞춰서(고전적인 스카이박스
+   기법) 먼 바닥이 하늘로 자연스럽게 이어져 보이게 한다. */
+const SKY_TOP = 0x1b2a4a;     // 하늘 위쪽(어두운 남색)
+const SKY_HORIZON = 0x5c6f88; // 지평선 근처(밝은 회청색) — 안개 색과 맞춤
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 120);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(SKY_HORIZON);
+scene.fog = new THREE.Fog(SKY_HORIZON, 20, 70); // 맵이 커져서 멀리 보이게 + 하늘색과 맞춰서 경계가 안 보이게
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 160);
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x333333, 1.2);
 scene.add(hemi);
@@ -357,8 +365,29 @@ const key = new THREE.DirectionalLight(0xffffff, 1.4);
 key.position.set(3, 6, 4);
 scene.add(key);
 
+/* ---- 하늘(스피어, 안쪽 면만 보이게) ----
+   버텍스 컬러로 위(어두운 남색)→아래(지평선, 안개색과 동일)로 그라데이션만
+   준다 — 텍스처/셰이더 없이 THREE 기본 기능만으로 충분하다. */
+function buildSky(){
+  const geo = new THREE.SphereGeometry(140, 24, 16);
+  const top = new THREE.Color(SKY_TOP);
+  const horizon = new THREE.Color(SKY_HORIZON);
+  const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  for(let i=0; i<pos.count; i++){
+    const ny = pos.getY(i) / 140; // -1(바닥) ~ 1(꼭대기)
+    const t = THREE.MathUtils.clamp(ny * 1.4 + 0.1, 0, 1); // 지평선 부근을 더 넓게
+    const c = horizon.clone().lerp(top, t);
+    colors[i*3] = c.r; colors[i*3+1] = c.g; colors[i*3+2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const mat = new THREE.MeshBasicMaterial({vertexColors:true, side:THREE.BackSide, fog:false});
+  scene.add(new THREE.Mesh(geo, mat));
+}
+buildSky();
+
 const floor = new THREE.Mesh(
-  new THREE.CircleGeometry(24, 48),
+  new THREE.CircleGeometry(70, 48),
   new THREE.MeshStandardMaterial({color:0x2a2a30, roughness:0.9})
 );
 floor.rotation.x = -Math.PI/2;
