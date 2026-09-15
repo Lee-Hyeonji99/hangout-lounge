@@ -27,15 +27,20 @@ jsDelivr의 GitHub CDN(`cdn.jsdelivr.net/gh/...`)으로 서로 직접 import한�
 - 아바타: 원래 계획은 **Quaternius**(CC0, glTF, Universal Animation Library —
   `docs/PLAN.md` 5번)였는데, 이 작업 환경의 네트워크 프록시가 Quaternius/Kenney
   같은 에셋 사이트 도메인을 막고 있어서(조직 정책 allowlist, GitHub만 허용)
-  받을 수가 없었다. 대신 **`assets/avatars/soldier.glb`**(three.js 공식 예제
-  에셋, CC0, `mrdoob/three.js` 저장소에서 GitHub raw로 받음)를 임시로 쓴다 —
-  Idle/Walk/Run/TPose 클립 보유, sit 없음. **정식 아바타(Quaternius 등)로
-  받을 수 있는 환경이 되면 이 파일만 교체**하면 된다 — `loader.load()` 경로
-  하나 + `actions` 맵의 클립 이름만 바꾸면 되도록 `index.html`을 짜뒀다.
-  Mixamo는 2025년부터 서비스가 불안정해서 애초에 배제.
+  받을 수가 없었다. 임시로 three.js 공식 예제 에셋(soldier.glb, 군인 모델)을
+  썼다가 톤이 안 맞고 외부 파일 의존을 없애자는 방향으로 바뀌어서, 지금은
+  **`index.html`의 `buildHamster()`가 Three.js 기본 도형(구)만 조합해서 직접
+  그리는 귀여운 햄스터 아바타**로 교체했다 — glTF 파일도, 외부 저장소 의존도
+  없음. 애니메이션은 클립이 없으니 `spawnAvatar()`의 `mixer.update(dt)`가
+  state(Idle/Walk)에 따라 통통 튀는 움직임·귀 흔들림·발 움직임을 매 프레임
+  직접 계산해서 만든다(`THREE.AnimationMixer`가 아니라 같은 인터페이스만
+  흉내낸 객체). **더 디테일한 아바타가 필요해지면(Quaternius 등) 이 함수만
+  glTF 로더로 교체**하면 된다.
 - 네트워킹: WebRTC(PeerJS로 시그널링 시작) — `docs/PLAN.md` 3번 전체가 설계.
-- 애니메이션 재생: `THREE.AnimationMixer` + 상태 이름 문자열만 네트워크로 전송,
-  실제 클립 재생은 각자 클라이언트가 로컬에서(`docs/PLAN.md` 4번).
+- 애니메이션 재생: 상태 이름 문자열(Idle/Walk)만 네트워크로 전송, 실제 움직임
+  계산은 각자 클라이언트가 로컬에서(`docs/PLAN.md` 4번). 현재 아바타는 glTF
+  클립이 없어서 `THREE.AnimationMixer` 대신 직접 짠 파츠 애니메이션을 쓴다
+  (위 "아바타" 항목).
 
 ## 아트 스타일
 
