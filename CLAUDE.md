@@ -18,6 +18,16 @@ jsDelivr의 GitHub CDN(`cdn.jsdelivr.net/gh/...`)으로 서로 직접 import한�
 - **이모지를 UI에 직접 쓰지 않는다.** 아이콘은 인라인 SVG로만(OS마다 이모지
   모양이 달라 톤이 깨진다) — web-games와 같은 규칙.
 
+## 워크플로우
+
+- **작업물은 항상 `main` 브랜치까지 푸시한다** — 별도 feature 브랜치에 올려두고
+  끝내지 않는다. PR 리뷰 단계 없이 바로 `main`에 반영하는 걸 전제로 한다(이
+  저장소는 사실상 1인 개발).
+- **푸시 전에 반드시 `git fetch origin main`으로 원격 최신 상태를 받고, 그
+  위에 병합(merge)한 뒤에 푸시한다** — 로컬이 뒤처진 상태로 강제 푸시하지
+  않는다. fast-forward가 안 되면(= main이 그 사이 진짜로 바뀌었으면) 충돌을
+  직접 풀고 병합 커밋을 남긴다.
+
 ## 스택
 
 - Three.js(ES 모듈) — `lib/vendor/three/build/three.module.js`로 **로컬 벤더링**해서 쓴다.
