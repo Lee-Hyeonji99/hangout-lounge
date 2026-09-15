@@ -46,6 +46,18 @@
     padding:0;cursor:pointer}
   .colorSwatch.selected{border-color:#fff;box-shadow:0 0 0 2px #8fd}
   #appearanceOpenBtn{align-self:flex-start}
+
+  /* ---- 입장/퇴장 토스트 + 로그 ---- */
+  #toastLayer{position:absolute;left:50%;transform:translateX(-50%);
+    top:calc(70px + env(safe-area-inset-top,0px));
+    display:flex;flex-direction:column;gap:6px;align-items:center;
+    pointer-events:none;z-index:5}
+  .toast{background:#0009;color:#eee;font-size:12px;padding:6px 12px;
+    border-radius:8px;border:1px solid #456;opacity:0;
+    transform:translateY(-6px);transition:opacity 0.25s,transform 0.25s}
+  .toast.show{opacity:1;transform:translateY(0)}
+  #eventLog{font-size:10px;color:#789;max-height:70px;overflow-y:auto;
+    margin-top:2px;display:flex;flex-direction:column-reverse;gap:2px}
   #myId{font-family:monospace;color:#8fd}
   #roomInfo{font-size:11px;color:#9ab}
   #peerList{font-size:11px;color:#9ab}
@@ -127,6 +139,7 @@
     <button id="changeNicknameBtn">변경</button></div>
   <div id="roomInfo">방 배정 중…</div>
   <div id="peerList">연결된 상대: 없음</div>
+  <div id="eventLog"></div>
   <button id="appearanceOpenBtn">외형 꾸미기</button>
   <details id="manualConnect">
     <summary>수동 연결(매칭 서버 없을 때만)</summary>
@@ -193,6 +206,7 @@
 </div>
 
 <div id="labelLayer"></div>
+<div id="toastLayer"></div>
 
 <div id="appearanceModal" hidden>
   <div id="appearanceBox">
@@ -1349,6 +1363,29 @@ document.getElementById('changeNicknameBtn').addEventListener('click', async ()=
   resolveNicknameCollision();
 });
 
+/* ---- 입장/퇴장 토스트 + 로그 ----
+   토스트는 잠깐 떴다 사라지고, 같은 내용을 #eventLog에도 최근 몇 개만
+   남겨서 놓쳐도 다시 볼 수 있게 한다. */
+const toastLayerEl = document.getElementById('toastLayer');
+const eventLogEl = document.getElementById('eventLog');
+function logEvent(text){
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = text;
+  toastLayerEl.appendChild(toast);
+  requestAnimationFrame(()=> toast.classList.add('show'));
+  setTimeout(()=>{
+    toast.classList.remove('show');
+    setTimeout(()=> toast.remove(), 300);
+  }, 2600);
+
+  const line = document.createElement('div');
+  line.textContent = text;
+  eventLogEl.appendChild(line);
+  while(eventLogEl.children.length > 8) eventLogEl.removeChild(eventLogEl.firstChild);
+}
+const announcedJoin = new Set(); // 닉네임이 도착한 시점에 한 번만 "입장" 로그를 남기기 위함
+
 const mesh = createMesh({
   onPeerJoin: async (id)=>{
     updatePeerList();
@@ -1356,6 +1393,7 @@ const mesh = createMesh({
       const av = await spawnAvatar();
       av.model.position.set(0,0,0);
       av.nameLabelEl = createNameLabel('…');
+      av.lastMsgAt = performance.now(); // 아래 유령 접속 감지용
       remoteAvatars.set(id, {...av, targetPos:av.model.position.clone(), targetYaw:0});
     }
     // 새로 연결된 상대에게(그리고 김에 기존 상대들에게도) 내 닉네임/외형/현재
@@ -1373,16 +1411,19 @@ const mesh = createMesh({
   onPeerLeave: (id)=>{
     const av = remoteAvatars.get(id);
     if(av){
+      logEvent(`${av.nickname || '누군가'}님이 나갔어요`);
       scene.remove(av.model);
       if(av.nameLabelEl) av.nameLabelEl.remove();
       if(av.nickname) usedNicknames.delete(av.nickname);
       remoteAvatars.delete(id);
     }
+    announcedJoin.delete(id);
     updatePeerList();
   },
   onData: (fromId, msg)=>{
     const av = remoteAvatars.get(fromId);
     if(!av) return;
+    av.lastMsgAt = performance.now(); // 뭐든 오면 "아직 살아있다"는 신호
     if(msg.type==='pos'){
       av.targetPos.set(msg.x, msg.y, msg.z);
       av.targetYaw = msg.yaw;
@@ -1395,6 +1436,10 @@ const mesh = createMesh({
       usedNicknames.add(msg.name);
       if(av.nameLabelEl) av.nameLabelEl.textContent = msg.name;
       resolveNicknameCollision();
+      if(!announcedJoin.has(fromId)){
+        announcedJoin.add(fromId);
+        logEvent(`${av.nickname}님이 들어왔어요`);
+      }
     } else if(msg.type==='appearance'){
       av.updateAppearance(msg.appearance);
     }
@@ -1405,6 +1450,19 @@ function updatePeerList(){
   const ids = mesh.peers;
   peerListEl.textContent = '연결된 상대: ' + (ids.length ? ids.join(', ') : '없음');
 }
+
+/* ---- 유령 접속 정리(이미 나간 사람이 계속 남아있던 문제) ----
+   탭을 그냥 닫아버리는 등 정상적인 종료 신호 없이 사라지면 WebRTC 자체의
+   접속 끊김 감지가 느리거나(때에 따라 몇십 초~그 이상) 아예 안 걸리는
+   경우가 있다. 위치는 초당 ~10회 오는 게 정상이니, 한동안(6초) 아무 메시지도
+   안 오면 죽은 걸로 보고 우리 쪽에서 먼저 연결을 끊어버린다. */
+const STALE_PEER_TIMEOUT = 6000;
+setInterval(()=>{
+  const now = performance.now();
+  for(const [id, av] of remoteAvatars){
+    if(now - av.lastMsgAt > STALE_PEER_TIMEOUT) mesh.disconnect(id);
+  }
+}, 2000);
 
 /* ---- 방 자동 배정(오토 인스턴싱, docs/PLAN.md 6번) ----
    api/room.js(Vercel 서버리스 함수)가 방별 인원(최대 12명)을 추적해서 빈
