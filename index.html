@@ -22,6 +22,15 @@
   #manualConnect summary{cursor:pointer}
   #manualConnect input{margin-top:6px;width:100%}
   #manualConnect button{margin-top:6px}
+  #appearancePanel{font-size:11px;color:#9ab;margin-top:2px}
+  #appearancePanel summary{cursor:pointer}
+  .appearanceLabel{font-size:10px;color:#789;margin-top:6px}
+  .appearanceRow{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+  .appearanceRow button{font-size:11px;padding:3px 7px}
+  .appearanceRow button.selected{border-color:#8fd;color:#fff}
+  .colorSwatch{width:22px;height:22px;border-radius:50%;border:2px solid #567;
+    padding:0;cursor:pointer}
+  .colorSwatch.selected{border-color:#fff}
   #myId{font-family:monospace;color:#8fd}
   #roomInfo{font-size:11px;color:#9ab}
   #peerList{font-size:11px;color:#9ab}
@@ -103,6 +112,31 @@
     <button id="changeNicknameBtn">변경</button></div>
   <div id="roomInfo">방 배정 중…</div>
   <div id="peerList">연결된 상대: 없음</div>
+  <details id="appearancePanel" open>
+    <summary>외형 꾸미기</summary>
+    <div class="appearanceLabel">몸통 색</div>
+    <div class="appearanceRow" id="bodyColorRow"></div>
+    <div class="appearanceLabel">눈</div>
+    <div class="appearanceRow" id="eyeStyleRow">
+      <button data-cat="eyeStyle" data-val="0">동그란눈</button>
+      <button data-cat="eyeStyle" data-val="1">웃는눈</button>
+      <button data-cat="eyeStyle" data-val="2">반짝눈</button>
+    </div>
+    <div class="appearanceLabel">입</div>
+    <div class="appearanceRow" id="mouthStyleRow">
+      <button data-cat="mouthStyle" data-val="0">없음</button>
+      <button data-cat="mouthStyle" data-val="1">냥이입</button>
+      <button data-cat="mouthStyle" data-val="2">웃는입</button>
+    </div>
+    <div class="appearanceLabel">머리 장식</div>
+    <div class="appearanceRow" id="hairStyleRow">
+      <button data-cat="hairStyle" data-val="0">없음</button>
+      <button data-cat="hairStyle" data-val="1">삐침머리</button>
+      <button data-cat="hairStyle" data-val="2">리본</button>
+    </div>
+    <div class="appearanceLabel">머리 장식 색</div>
+    <div class="appearanceRow" id="hairColorRow"></div>
+  </details>
   <details id="manualConnect">
     <summary>수동 연결(매칭 서버 없을 때만)</summary>
     <input id="remoteIdInput" placeholder="상대 ID 붙여넣기">
@@ -229,6 +263,22 @@ async function getNickname(){
   const saved = loadSavedNickname();
   if(saved) return saved;
   return promptNickname('');
+}
+
+/* ---- 외형 커스터마이징 저장 ----
+   닉네임과 같은 이유로 서버 없이 localStorage에만 남긴다. DEFAULT_APPEARANCE는
+   아래(HAMSTER_PALETTE 근처)에서 정의되지만, 이 함수들은 main() 시작 이후에나
+   실제로 호출되므로 그때는 이미 다 정의돼 있다. */
+const APPEARANCE_STORAGE_KEY = 'hangout-lounge:appearance';
+function loadSavedAppearance(){
+  try {
+    const raw = localStorage.getItem(APPEARANCE_STORAGE_KEY);
+    if(!raw) return { ...DEFAULT_APPEARANCE };
+    return { ...DEFAULT_APPEARANCE, ...JSON.parse(raw) };
+  } catch { return { ...DEFAULT_APPEARANCE }; }
+}
+function saveAppearance(appearance){
+  try { localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(appearance)); } catch {}
 }
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
@@ -471,13 +521,39 @@ const HAMSTER_PALETTE = {
   cigaretteTip: 0xe8703a,
 };
 
-function buildHamster(){
-  const bodyMat  = new THREE.MeshStandardMaterial({color:HAMSTER_PALETTE.bodyLight, roughness:0.85});
-  const bellyMat = new THREE.MeshStandardMaterial({color:HAMSTER_PALETTE.belly,     roughness:0.85});
-  const shadeMat = new THREE.MeshStandardMaterial({color:HAMSTER_PALETTE.bodyShade, roughness:0.85});
+/* ---- 커스터마이징 팔레트 ----
+   몸통 색은 "기본색 하나만 고르면 진한 톤/밝은 톤을 정해진 계산식으로
+   자동 유도"하는 방식이다(ART_STYLE 1번 "즉석에서 색 생성 금지"의 취지는
+   "일관성 없이 아무 색이나 막 늘어나는 것"을 막자는 것이라, 여기서는 고정된
+   6가지 기본색 + 정해진 유도 공식(HSL 밝기만 ±) 하나로 제한해서 그 취지를
+   지킨다 — 색상 자체가 무한정 늘어나진 않는다). */
+const BODY_COLOR_OPTIONS = [0xf3d9b1, 0xa9784c, 0xf5f0e6, 0xb8b0a8, 0xf0c4c4, 0x9fb0b8];
+const HAIR_COLOR_OPTIONS = [0x6b4a34, 0x2a1f1a, 0xe0b8d8, 0xd8c840];
+
+function deriveBodyShades(baseHex){
+  const base = new THREE.Color(baseHex);
+  const shade = base.clone().offsetHSL(0, 0, -0.14);
+  const belly = base.clone().offsetHSL(0, 0, 0.16);
+  return { body: base, shade, belly };
+}
+
+const DEFAULT_APPEARANCE = {
+  bodyColorIdx: 0,
+  eyeStyle: 0,   // 0=동그란 눈, 1=웃는 눈(아치), 2=반짝이는 눈
+  mouthStyle: 0, // 0=없음, 1=냥이 입(:3), 2=벌린 웃음
+  hairStyle: 0,  // 0=없음, 1=삐침머리, 2=리본
+  hairColorIdx: 0,
+};
+
+function buildHamster(appearance){
+  const shades = deriveBodyShades(BODY_COLOR_OPTIONS[appearance.bodyColorIdx]);
+  const bodyMat  = new THREE.MeshStandardMaterial({color:shades.body,  roughness:0.85});
+  const bellyMat = new THREE.MeshStandardMaterial({color:shades.belly, roughness:0.85});
+  const shadeMat = new THREE.MeshStandardMaterial({color:shades.shade, roughness:0.85});
   const cheekMat = new THREE.MeshStandardMaterial({color:HAMSTER_PALETTE.cheek,     roughness:0.9});
   const eyeMat   = new THREE.MeshStandardMaterial({color:HAMSTER_PALETTE.eye,       roughness:0.4});
   const noseMat  = new THREE.MeshStandardMaterial({color:HAMSTER_PALETTE.nose,      roughness:0.6});
+  const hairMat  = new THREE.MeshStandardMaterial({color:HAIR_COLOR_OPTIONS[appearance.hairColorIdx], roughness:0.7});
 
   const root = new THREE.Group();
   const bouncePivot = new THREE.Group();
@@ -523,19 +599,111 @@ function buildHamster(){
   earR.position.x = 0.17;
   headPivot.add(earR);
 
-  // 눈
-  const eyeGeo = new THREE.SphereGeometry(0.045, 10, 8);
-  const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
-  eyeL.position.set(-0.1, 0.02, 0.27);
-  headPivot.add(eyeL);
-  const eyeR = eyeL.clone();
-  eyeR.position.x = 0.1;
-  headPivot.add(eyeR);
+  // 눈(스타일 3종 — 전부 만들어두고 고른 것만 보이게 토글)
+  function mirrorPair(mesh, x){
+    const l = mesh, r = mesh.clone();
+    l.position.set(-x, l.position.y, l.position.z);
+    r.position.set(x, l.position.y, l.position.z);
+    return [l, r];
+  }
+  const eyeGroups = []; // [스타일0 그룹, 스타일1 그룹, 스타일2 그룹]
+
+  // 0: 동그란 눈(기본)
+  const eyesRound = new THREE.Group();
+  {
+    const eyeGeo = new THREE.SphereGeometry(0.045, 10, 8);
+    const [l, r] = mirrorPair(new THREE.Mesh(eyeGeo, eyeMat), 0.1);
+    l.position.y = r.position.y = 0.02; l.position.z = r.position.z = 0.27;
+    eyesRound.add(l, r);
+  }
+  headPivot.add(eyesRound);
+  eyeGroups.push(eyesRound);
+
+  // 1: 웃는 눈(아치 모양)
+  const eyesHappy = new THREE.Group();
+  {
+    const arcGeo = new THREE.TorusGeometry(0.045, 0.012, 6, 10, Math.PI);
+    const [l, r] = mirrorPair(new THREE.Mesh(arcGeo, eyeMat), 0.1);
+    [l, r].forEach(m=>{ m.position.y = 0.01; m.position.z = 0.27; m.rotation.z = Math.PI; });
+    eyesHappy.add(l, r);
+  }
+  headPivot.add(eyesHappy);
+  eyeGroups.push(eyesHappy);
+
+  // 2: 반짝이는 눈(큰 눈 + 작은 하이라이트)
+  const eyesSparkle = new THREE.Group();
+  {
+    const bigGeo = new THREE.SphereGeometry(0.055, 10, 8);
+    const [l, r] = mirrorPair(new THREE.Mesh(bigGeo, eyeMat), 0.1);
+    l.position.y = r.position.y = 0.02; l.position.z = r.position.z = 0.27;
+    eyesSparkle.add(l, r);
+    const hiGeo = new THREE.SphereGeometry(0.018, 8, 6);
+    const hiMat = new THREE.MeshBasicMaterial({color:0xffffff});
+    const [hl, hr] = mirrorPair(new THREE.Mesh(hiGeo, hiMat), 0.115);
+    hl.position.y = hr.position.y = 0.04; hl.position.z = hr.position.z = 0.31;
+    eyesSparkle.add(hl, hr);
+  }
+  headPivot.add(eyesSparkle);
+  eyeGroups.push(eyesSparkle);
 
   // 코
   const nose = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), noseMat);
   nose.position.set(0, -0.05, 0.3);
   headPivot.add(nose);
+
+  // 입(스타일 3종 — 0번은 "없음"이라 실제 메시가 없다)
+  const mouthGroups = [null];
+  const mouthCat = new THREE.Group(); // 1: 냥이 입(:3)
+  {
+    const dotGeo = new THREE.SphereGeometry(0.018, 8, 6);
+    const [l, r] = mirrorPair(new THREE.Mesh(dotGeo, noseMat), 0.03);
+    l.position.y = r.position.y = -0.09; l.position.z = r.position.z = 0.29;
+    mouthCat.add(l, r);
+  }
+  headPivot.add(mouthCat);
+  mouthGroups.push(mouthCat);
+  const mouthSmile = new THREE.Group(); // 2: 웃는 입 — 작은 구슬 5개를 살짝
+  // 곡선으로 배치해서 웃는 입 모양을 흉내(가장자리가 가운데보다 위로).
+  {
+    const dotGeo = new THREE.SphereGeometry(0.016, 6, 6);
+    const n = 5;
+    for(let i=0; i<n; i++){
+      const t = i/(n-1) - 0.5; // -0.5 ~ 0.5
+      const dot = new THREE.Mesh(dotGeo, noseMat);
+      dot.position.set(t*0.11, -0.11 + t*t*0.2, 0.3);
+      mouthSmile.add(dot);
+    }
+  }
+  headPivot.add(mouthSmile);
+  mouthGroups.push(mouthSmile);
+
+  // 머리 장식(스타일 3종 — 0번은 "없음")
+  const hairGroups = [null];
+  // 머리 소품은 머리(반지름 0.3 구)의 표면 밖으로 확실히 나오게 배치해야
+  // 파묻혀서 안 보인다(눈/코도 이 반지름 살짝 밖에 있는 것과 같은 이유).
+  const hairTuft = new THREE.Group(); // 1: 삐침머리
+  {
+    const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.18, 8), hairMat);
+    tuft.position.set(0.03, 0.34, 0.08);
+    tuft.rotation.z = -0.4;
+    hairTuft.add(tuft);
+  }
+  headPivot.add(hairTuft);
+  hairGroups.push(hairTuft);
+  const hairBow = new THREE.Group(); // 2: 리본(머리 오른쪽 위에)
+  {
+    const bx = 0.22, by = 0.27, bz = 0.1;
+    const knot = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 8), hairMat);
+    knot.position.set(bx, by, bz);
+    hairBow.add(knot);
+    const wingGeo = new THREE.ConeGeometry(0.05, 0.08, 4);
+    const [wl, wr] = mirrorPair(new THREE.Mesh(wingGeo, hairMat), 0.05);
+    wl.position.set(bx - 0.05, by, bz); wr.position.set(bx + 0.05, by, bz);
+    wl.rotation.z = Math.PI/2; wr.rotation.z = -Math.PI/2;
+    hairBow.add(wl, wr);
+  }
+  headPivot.add(hairBow);
+  hairGroups.push(hairBow);
 
   // 발(앞/뒤 4개) — sit 포즈에서 원래 자리로 되돌릴 수 있게 시작 좌표를
   // userData에 저장해둔다(뒷발 2개는 앉을 때 몸 아래로 당겨야 해서 필요).
@@ -623,7 +791,24 @@ function buildHamster(){
     root, bouncePivot, headPivot, earL, earR, feet,
     cigarette, cigaretteTipLocal: cigTip,
     armPivot, finger, heartGroup,
+    bodyMat, shadeMat, bellyMat, hairMat,
+    eyeGroups, mouthGroups, hairGroups,
   };
+}
+
+/** 외형(몸통색/눈/입/머리 장식)을 이미 만들어진 아바타 파츠에 적용한다.
+ *  buildHamster()가 처음 만들 때도, 나중에 설정을 바꿀 때도 이 함수 하나로
+ *  처리한다 — 지오메트리를 다시 만들지 않고 색만 바꾸거나(body/shade/belly/
+ *  hairMat) 미리 만들어둔 스타일 그룹 중 하나만 보이게 토글한다. */
+function applyAppearance(parts, appearance){
+  const shades = deriveBodyShades(BODY_COLOR_OPTIONS[appearance.bodyColorIdx]);
+  parts.bodyMat.color.copy(shades.body);
+  parts.shadeMat.color.copy(shades.shade);
+  parts.bellyMat.color.copy(shades.belly);
+  parts.hairMat.color.setHex(HAIR_COLOR_OPTIONS[appearance.hairColorIdx]);
+  parts.eyeGroups.forEach((g, i)=>{ g.visible = i === appearance.eyeStyle; });
+  parts.mouthGroups.forEach((g, i)=>{ if(g) g.visible = i === appearance.mouthStyle; });
+  parts.hairGroups.forEach((g, i)=>{ if(g) g.visible = i === appearance.hairStyle; });
 }
 
 /* 애니메이션 클립이 없으니 THREE.AnimationMixer 대신 상태(state)에 따라
@@ -634,8 +819,9 @@ function buildHamster(){
    몸통을 낮추고 뒷발을 몸 아래로 당겨서 앉은 느낌만 낸다. */
 const SIT_DROP = 0.1; // 앉을 때 몸통이 내려앉는 높이
 
-async function spawnAvatar(){
-  const parts = buildHamster();
+async function spawnAvatar(appearance){
+  const parts = buildHamster(appearance || DEFAULT_APPEARANCE);
+  applyAppearance(parts, appearance || DEFAULT_APPEARANCE);
   scene.add(parts.root);
 
   let state = 'Idle';
@@ -749,7 +935,8 @@ async function spawnAvatar(){
     state = name;
     stateStartT = t;
   }
-  return { model: parts.root, mixer, playState };
+  function updateAppearance(appearance){ applyAppearance(parts, appearance); }
+  return { model: parts.root, mixer, playState, updateAppearance };
 }
 
 /* 여기부터 async main() 안에서 실행한다 — 예전에 다른 게임(붕어빵 카페)에서
@@ -782,8 +969,51 @@ function updateLabelPosition(labelEl, model){
 }
 
 /* ---- 내 아바타 + WASD 이동 ---- */
-const me = await spawnAvatar();
+let myAppearance = loadSavedAppearance();
+const me = await spawnAvatar(myAppearance);
 me.nameLabelEl = createNameLabel(myNickname);
+
+/* ---- 외형 커스터마이징 UI ----
+   몸통 색/머리 장식 색은 BODY_COLOR_OPTIONS/HAIR_COLOR_OPTIONS 배열로부터
+   스와치 버튼을 그때그때 만들고, 눈/입/머리 장식 모양은 이미 HTML에 있는
+   버튼 3개짜리 행을 그대로 쓴다. 바뀔 때마다 저장 + 내 아바타에 바로
+   반영 + 방에 있는 사람들에게 브로드캐스트까지 한 함수(applyAppearanceChange)
+   에서 처리한다. */
+function buildColorSwatches(containerId, options, cat){
+  const row = document.getElementById(containerId);
+  options.forEach((hex, i)=>{
+    const btn = document.createElement('button');
+    btn.className = 'colorSwatch';
+    btn.style.background = '#' + hex.toString(16).padStart(6,'0');
+    btn.dataset.cat = cat;
+    btn.dataset.val = i;
+    row.appendChild(btn);
+  });
+}
+buildColorSwatches('bodyColorRow', BODY_COLOR_OPTIONS, 'bodyColorIdx');
+buildColorSwatches('hairColorRow', HAIR_COLOR_OPTIONS, 'hairColorIdx');
+
+function refreshAppearanceUI(){
+  document.querySelectorAll('#appearancePanel [data-cat]').forEach(btn=>{
+    const cat = btn.dataset.cat;
+    const val = Number(btn.dataset.val);
+    btn.classList.toggle('selected', myAppearance[cat] === val);
+  });
+}
+function applyAppearanceChange(cat, val){
+  myAppearance = { ...myAppearance, [cat]: val };
+  saveAppearance(myAppearance);
+  me.updateAppearance(myAppearance);
+  refreshAppearanceUI();
+  mesh.broadcast({type:'appearance', appearance: myAppearance});
+}
+document.getElementById('appearancePanel').addEventListener('click', (e)=>{
+  const btn = e.target.closest('[data-cat]');
+  if(!btn) return;
+  applyAppearanceChange(btn.dataset.cat, Number(btn.dataset.val));
+});
+refreshAppearanceUI();
+
 const keys = {KeyW:false,KeyA:false,KeyS:false,KeyD:false};
 addEventListener('keydown', e=>{ if(e.code in keys) keys[e.code]=true; });
 addEventListener('keyup',   e=>{ if(e.code in keys) keys[e.code]=false; });
@@ -1017,7 +1247,7 @@ renderer.domElement.addEventListener('pointermove', e=>{
   dragLastX = e.clientX; dragLastY = e.clientY;
   dragMoved += Math.hypot(dx, dy);
   camYaw -= dx * MOUSE_LOOK_SENS;
-  camPitch = Math.min(CAM_PITCH_MAX, Math.max(CAM_PITCH_MIN, camPitch - dy*MOUSE_LOOK_SENS));
+  camPitch = Math.min(CAM_PITCH_MAX, Math.max(CAM_PITCH_MIN, camPitch + dy*MOUSE_LOOK_SENS));
 });
 renderer.domElement.addEventListener('pointerup', e=>{ if(e.pointerId===dragPointerId) dragPointerId=null; });
 renderer.domElement.addEventListener('pointercancel', e=>{ if(e.pointerId===dragPointerId) dragPointerId=null; });
@@ -1080,8 +1310,9 @@ const mesh = createMesh({
       av.nameLabelEl = createNameLabel('…');
       remoteAvatars.set(id, {...av, targetPos:av.model.position.clone(), targetYaw:0});
     }
-    // 새로 연결된 상대에게(그리고 김에 기존 상대들에게도) 내 닉네임을 알린다.
+    // 새로 연결된 상대에게(그리고 김에 기존 상대들에게도) 내 닉네임/외형을 알린다.
     mesh.broadcast({type:'nickname', name: myNickname});
+    mesh.broadcast({type:'appearance', appearance: myAppearance});
   },
   onPeerLeave: (id)=>{
     const av = remoteAvatars.get(id);
@@ -1108,6 +1339,8 @@ const mesh = createMesh({
       usedNicknames.add(msg.name);
       if(av.nameLabelEl) av.nameLabelEl.textContent = msg.name;
       resolveNicknameCollision();
+    } else if(msg.type==='appearance'){
+      av.updateAppearance(msg.appearance);
     }
   },
 });
