@@ -22,15 +22,30 @@
   #manualConnect summary{cursor:pointer}
   #manualConnect input{margin-top:6px;width:100%}
   #manualConnect button{margin-top:6px}
-  #appearancePanel{font-size:11px;color:#9ab;margin-top:2px}
-  #appearancePanel summary{cursor:pointer}
-  .appearanceLabel{font-size:10px;color:#789;margin-top:6px}
-  .appearanceRow{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
-  .appearanceRow button{font-size:11px;padding:3px 7px}
-  .appearanceRow button.selected{border-color:#8fd;color:#fff}
-  .colorSwatch{width:22px;height:22px;border-radius:50%;border:2px solid #567;
+  /* ---- 외형 꾸미기: 게임 화면을 안 가리는 모달로(예전엔 우측 패널에 늘
+     펼쳐져 있어서 시야를 가린다는 피드백으로 변경) ---- */
+  #appearanceModal{position:fixed;inset:0;background:#000a;z-index:11;
+    display:flex;align-items:center;justify-content:center;padding:20px}
+  #appearanceModal[hidden]{display:none}
+  #appearanceBox{background:#1c1c22;border:1px solid #445;border-radius:14px;
+    padding:18px 20px;max-width:360px;width:100%;max-height:85vh;overflow-y:auto;
+    color:#ddd;font-size:13px}
+  #appearanceHeader{display:flex;justify-content:space-between;align-items:center;
+    font-size:15px;color:#fff;margin-bottom:4px}
+  #appearanceHeader button{background:none;border:none;color:#9ab;cursor:pointer;
+    padding:4px}
+  #appearanceHeader button:hover{color:#fff}
+  .appearanceLabel{font-size:11px;color:#789;margin-top:12px}
+  .appearanceRow{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .styleBtn{width:44px;height:44px;padding:0;border-radius:8px;border:2px solid #445;
+    background:#242430;color:#cde;display:flex;align-items:center;justify-content:center;
+    cursor:pointer}
+  .styleBtn:hover{background:#2e2e3c}
+  .styleBtn.selected{border-color:#8fd;background:#2a3b38}
+  .colorSwatch{width:28px;height:28px;border-radius:50%;border:2px solid #567;
     padding:0;cursor:pointer}
-  .colorSwatch.selected{border-color:#fff}
+  .colorSwatch.selected{border-color:#fff;box-shadow:0 0 0 2px #8fd}
+  #appearanceOpenBtn{align-self:flex-start}
   #myId{font-family:monospace;color:#8fd}
   #roomInfo{font-size:11px;color:#9ab}
   #peerList{font-size:11px;color:#9ab}
@@ -112,31 +127,7 @@
     <button id="changeNicknameBtn">변경</button></div>
   <div id="roomInfo">방 배정 중…</div>
   <div id="peerList">연결된 상대: 없음</div>
-  <details id="appearancePanel" open>
-    <summary>외형 꾸미기</summary>
-    <div class="appearanceLabel">몸통 색</div>
-    <div class="appearanceRow" id="bodyColorRow"></div>
-    <div class="appearanceLabel">눈</div>
-    <div class="appearanceRow" id="eyeStyleRow">
-      <button data-cat="eyeStyle" data-val="0">동그란눈</button>
-      <button data-cat="eyeStyle" data-val="1">웃는눈</button>
-      <button data-cat="eyeStyle" data-val="2">반짝눈</button>
-    </div>
-    <div class="appearanceLabel">입</div>
-    <div class="appearanceRow" id="mouthStyleRow">
-      <button data-cat="mouthStyle" data-val="0">없음</button>
-      <button data-cat="mouthStyle" data-val="1">냥이입</button>
-      <button data-cat="mouthStyle" data-val="2">웃는입</button>
-    </div>
-    <div class="appearanceLabel">머리 장식</div>
-    <div class="appearanceRow" id="hairStyleRow">
-      <button data-cat="hairStyle" data-val="0">없음</button>
-      <button data-cat="hairStyle" data-val="1">삐침머리</button>
-      <button data-cat="hairStyle" data-val="2">리본</button>
-    </div>
-    <div class="appearanceLabel">머리 장식 색</div>
-    <div class="appearanceRow" id="hairColorRow"></div>
-  </details>
+  <button id="appearanceOpenBtn">외형 꾸미기</button>
   <details id="manualConnect">
     <summary>수동 연결(매칭 서버 없을 때만)</summary>
     <input id="remoteIdInput" placeholder="상대 ID 붙여넣기">
@@ -202,6 +193,60 @@
 </div>
 
 <div id="labelLayer"></div>
+
+<div id="appearanceModal" hidden>
+  <div id="appearanceBox">
+    <div id="appearanceHeader">
+      <span>외형 꾸미기</span>
+      <button id="appearanceCloseBtn" title="닫기">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+    <div class="appearanceLabel">몸통 색</div>
+    <div class="appearanceRow" id="bodyColorRow"></div>
+
+    <div class="appearanceLabel">눈</div>
+    <div class="appearanceRow" id="eyeStyleRow">
+      <button class="styleBtn" data-cat="eyeStyle" data-val="0" title="동그란눈">
+        <svg viewBox="0 0 24 24" width="26" height="26"><circle cx="8" cy="12" r="2.6" fill="currentColor"/><circle cx="16" cy="12" r="2.6" fill="currentColor"/></svg>
+      </button>
+      <button class="styleBtn" data-cat="eyeStyle" data-val="1" title="웃는눈">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 13c1.5-3 4.5-3 6 0"/><path d="M13 13c1.5-3 4.5-3 6 0"/></svg>
+      </button>
+      <button class="styleBtn" data-cat="eyeStyle" data-val="2" title="반짝눈">
+        <svg viewBox="0 0 24 24" width="26" height="26"><circle cx="7" cy="13" r="3" fill="currentColor"/><circle cx="17" cy="13" r="3" fill="currentColor"/><path d="M7 5v2.4M17 5v2.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <div class="appearanceLabel">입</div>
+    <div class="appearanceRow" id="mouthStyleRow">
+      <button class="styleBtn" data-cat="mouthStyle" data-val="0" title="없음">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="13" r="6.5"/><line x1="7.4" y1="18.2" x2="16.6" y2="7.8"/></svg>
+      </button>
+      <button class="styleBtn" data-cat="mouthStyle" data-val="1" title="냥이입">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12l2 4 3-3 3 3 2-4"/></svg>
+      </button>
+      <button class="styleBtn" data-cat="mouthStyle" data-val="2" title="웃는입">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 12c2 4.5 10 4.5 12 0"/></svg>
+      </button>
+    </div>
+
+    <div class="appearanceLabel">머리 장식</div>
+    <div class="appearanceRow" id="hairStyleRow">
+      <button class="styleBtn" data-cat="hairStyle" data-val="0" title="없음">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="13" r="6.5"/><line x1="7.4" y1="18.2" x2="16.6" y2="7.8"/></svg>
+      </button>
+      <button class="styleBtn" data-cat="hairStyle" data-val="1" title="삐침머리">
+        <svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 4l3.5 12-3.5-3.5-3.5 3.5z" fill="currentColor"/></svg>
+      </button>
+      <button class="styleBtn" data-cat="hairStyle" data-val="2" title="리본">
+        <svg viewBox="0 0 24 24" width="26" height="26"><path d="M11 12L4.5 7.5v9z" fill="currentColor"/><path d="M13 12l6.5-4.5v9z" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/></svg>
+      </button>
+    </div>
+    <div class="appearanceLabel">머리 장식 색</div>
+    <div class="appearanceRow" id="hairColorRow"></div>
+  </div>
+</div>
 
 <div id="nameGate" hidden>
   <div id="nameGateBox">
@@ -994,7 +1039,7 @@ buildColorSwatches('bodyColorRow', BODY_COLOR_OPTIONS, 'bodyColorIdx');
 buildColorSwatches('hairColorRow', HAIR_COLOR_OPTIONS, 'hairColorIdx');
 
 function refreshAppearanceUI(){
-  document.querySelectorAll('#appearancePanel [data-cat]').forEach(btn=>{
+  document.querySelectorAll('#appearanceModal [data-cat]').forEach(btn=>{
     const cat = btn.dataset.cat;
     const val = Number(btn.dataset.val);
     btn.classList.toggle('selected', myAppearance[cat] === val);
@@ -1007,12 +1052,15 @@ function applyAppearanceChange(cat, val){
   refreshAppearanceUI();
   mesh.broadcast({type:'appearance', appearance: myAppearance});
 }
-document.getElementById('appearancePanel').addEventListener('click', (e)=>{
+const appearanceModalEl = document.getElementById('appearanceModal');
+appearanceModalEl.addEventListener('click', (e)=>{
   const btn = e.target.closest('[data-cat]');
-  if(!btn) return;
-  applyAppearanceChange(btn.dataset.cat, Number(btn.dataset.val));
+  if(btn){ applyAppearanceChange(btn.dataset.cat, Number(btn.dataset.val)); return; }
+  if(e.target.id === 'appearanceModal') appearanceModalEl.hidden = true; // 바깥(배경) 클릭 시 닫기
 });
 refreshAppearanceUI();
+document.getElementById('appearanceOpenBtn').addEventListener('click', ()=>{ appearanceModalEl.hidden = false; });
+document.getElementById('appearanceCloseBtn').addEventListener('click', ()=>{ appearanceModalEl.hidden = true; });
 
 const keys = {KeyW:false,KeyA:false,KeyS:false,KeyD:false};
 addEventListener('keydown', e=>{ if(e.code in keys) keys[e.code]=true; });
