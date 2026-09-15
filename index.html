@@ -100,10 +100,21 @@
     background:#234;color:#cde;display:flex;align-items:center;justify-content:center;cursor:pointer}
   #emoteMenu button:hover{background:#345}
 
+  /* ---- 좁은 화면(모바일)용 메뉴 토글 버튼 ----
+     기본은 숨김(데스크톱은 패널이 항상 보임) — 아래 미디어쿼리가 좁은
+     화면에서만 이 버튼을 보여주고 패널은 기본 접어둔다("패널이 너무 크다"
+     피드백 대응). */
+  #netPanelToggleBtn{display:none;width:40px;height:40px;border-radius:8px;
+    background:#0009;border:1px solid #456;color:#cde;align-items:center;
+    justify-content:center;cursor:pointer;flex-shrink:0}
+
   @media (max-width:520px){
     #topBar{flex-direction:column}
     #hint{font-size:12px;max-width:none;padding:6px 9px}
     #netPanel{font-size:12px;min-width:0;width:100%;padding:8px 10px}
+    #netPanelToggleBtn{display:flex;align-self:flex-end}
+    #netPanel{display:none}
+    #netPanel.open{display:flex}
   }
 
   /* ---- 닉네임 입장 게이트(docs/PLAN.md 6-a) ---- */
@@ -137,6 +148,9 @@
 <div id="hint">WASD 또는 왼쪽 아래 조이스틱으로 이동, 벤치를 클릭/탭하면 앉는다.
   오른쪽 아래 버튼(또는 F)으로 담배 피기 — 둘 다 움직이면 자동으로 풀린다.
   접속하면 매칭 서버가 빈 방에 자동으로 넣어준다.</div>
+<button id="netPanelToggleBtn" title="메뉴">
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+</button>
 <div id="netPanel">
   내 ID: <span id="myId">연결 중…</span>
   <div>닉네임: <span id="nicknameDisplay"></span>
@@ -932,14 +946,16 @@ async function spawnAvatar(appearance){
   const smokeParticles = [];
   let smokeEmitAcc = 0;
   const smokeWorldPos = new THREE.Vector3();
+  const emberColor = new THREE.Color(HAMSTER_PALETTE.cigaretteTip);
+  const igniteColor = new THREE.Color(0xfff3b0); // 불 붙이는 순간 확 밝아지는 색
 
   const mixer = {
     update(dt){
       t += dt;
       const localT = t - stateStartT; // 이 상태가 시작된 뒤로 지난 시간
       const walking = state === 'Walk';
-      const sitting = state === 'Sit';
-      const smoking = state === 'Smoke';
+      const sitting = state === 'Sit' || state === 'SitSmoke';
+      const smoking = state === 'Smoke' || state === 'SitSmoke';
       const jumping = state === 'Jump';
       const waving  = state === 'Wave';
       const clapping = state === 'Clap';
@@ -956,8 +972,9 @@ async function spawnAvatar(appearance){
       parts.earL.rotation.z =  earWiggle;
       parts.earR.rotation.z = -earWiggle;
       parts.headPivot.rotation.z = Math.sin(t*(walking?9:1.6)) * (walking?0.04:0.03);
-      // 앉으면 살짝 고개 숙이고, 담배 물면 살짝 기울인다.
-      parts.headPivot.rotation.x = sitting ? 0.12 : (smoking ? 0.05 : 0);
+      // 앉으면 살짝 고개 숙이고, 담배 물면 살짝 기울인다 — 둘 다 해당되면
+      // (SitSmoke) 그 중간값으로 블렌딩해서 두 포즈가 안 부딪히게 한다.
+      parts.headPivot.rotation.x = (sitting && smoking) ? 0.09 : sitting ? 0.12 : (smoking ? 0.05 : 0);
 
       // 감정표현: 팔(손흔들기/박수/뻐큐 공용) + 하트(머리 위에 둥실).
       parts.armPivot.visible = armEmote;
@@ -980,6 +997,11 @@ async function spawnAvatar(appearance){
 
       parts.cigarette.visible = smoking;
       if(smoking){
+        // 불 붙이는 연출: 상태 시작 직후(0.3초) 담배 끝이 확 밝고 크게
+        // 타올랐다가 원래 불씨 크기/색으로 가라앉는다.
+        const igniteT = Math.min(localT/0.3, 1);
+        parts.cigaretteTipLocal.scale.setScalar(1 + (1-igniteT)*1.8);
+        parts.cigaretteTipLocal.material.color.copy(igniteColor).lerp(emberColor, igniteT);
         smokeEmitAcc += dt;
         if(smokeEmitAcc > 0.5){
           smokeEmitAcc = 0;
@@ -1151,6 +1173,11 @@ refreshAppearanceUI();
 document.getElementById('appearanceOpenBtn').addEventListener('click', ()=>{ appearanceModalEl.hidden = false; });
 document.getElementById('appearanceCloseBtn').addEventListener('click', ()=>{ appearanceModalEl.hidden = true; });
 
+// 좁은 화면에서 패널이 너무 크다는 피드백 — 기본 접어두고 아이콘 버튼으로 토글.
+document.getElementById('netPanelToggleBtn').addEventListener('click', ()=>{
+  document.getElementById('netPanel').classList.toggle('open');
+});
+
 const chatInputEl = document.getElementById('chatInput');
 chatInputEl.addEventListener('keydown', (e)=>{
   e.stopPropagation(); // 만약을 위해 — 게임 단축키 쪽으로 새지 않게
@@ -1283,9 +1310,10 @@ const pointerNDC = new THREE.Vector2();
 const SEAT_OCCUPIED_DIST = 0.25;
 
 function isSeatOccupied(seatWorldPos){
-  if(!sitAnim && myState==='Sit' && me.model.position.distanceTo(seatWorldPos) < SEAT_OCCUPIED_DIST) return true;
+  const sitStates = ['Sit', 'SitSmoke'];
+  if(!sitAnim && sitStates.includes(myState) && me.model.position.distanceTo(seatWorldPos) < SEAT_OCCUPIED_DIST) return true;
   for(const av of remoteAvatars.values()){
-    if(av.currentState==='Sit' && av.model.position.distanceTo(seatWorldPos) < SEAT_OCCUPIED_DIST) return true;
+    if(sitStates.includes(av.currentState) && av.model.position.distanceTo(seatWorldPos) < SEAT_OCCUPIED_DIST) return true;
   }
   return false;
 }
@@ -1331,10 +1359,29 @@ renderer.domElement.addEventListener('click', (e)=>{
 
 /* ---- 담배 버튼(제자리 토글) ----
    벤치처럼 씬 안의 오브젝트를 클릭하는 게 아니라 어디서든 바로 피울 수
-   있는 개인 액션이라 UI 버튼(+ 키보드 F)으로 토글한다. */
+   있는 개인 액션이라 UI 버튼(+ 키보드 F)으로 토글한다. 앉아있는 동안
+   누르면 일어나지 않고 'SitSmoke'(앉은 자세 + 담배)로 전환한다 — 상태
+   문자열 하나로 표현하되 mixer 쪽에서 sitting/smoking 두 판정을 동시에
+   참으로 취급해서 포즈를 섞는다(위 mixer.update 참고). */
 const smokeBtnEl = document.getElementById('smokeBtn');
 function toggleSmoke(){
   if(specialState === 'Smoke'){ endSpecialState(); return; }
+  if(specialState === 'SitSmoke'){
+    specialState = 'Sit';
+    myState = 'Sit';
+    me.playState('Sit');
+    netSendStateSoon();
+    smokeBtnEl.classList.remove('active');
+    return;
+  }
+  if(specialState === 'Sit'){
+    specialState = 'SitSmoke';
+    myState = 'SitSmoke';
+    me.playState('SitSmoke');
+    netSendStateSoon();
+    smokeBtnEl.classList.add('active');
+    return;
+  }
   specialState = 'Smoke';
   myState = 'Smoke';
   me.playState('Smoke');
