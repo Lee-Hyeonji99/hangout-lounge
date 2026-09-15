@@ -18,6 +18,10 @@
   #netPanel input{font:inherit;padding:5px 7px;border-radius:5px;border:1px solid #555;background:#222;color:#eee}
   #netPanel button{font:inherit;padding:5px 9px;border-radius:5px;border:1px solid #567;background:#234;color:#cde;cursor:pointer}
   #netPanel button:hover{background:#345}
+  #manualConnect{font-size:11px;color:#9ab;margin-top:2px}
+  #manualConnect summary{cursor:pointer}
+  #manualConnect input{margin-top:6px;width:100%}
+  #manualConnect button{margin-top:6px}
   #myId{font-family:monospace;color:#8fd}
   #roomInfo{font-size:11px;color:#9ab}
   #peerList{font-size:11px;color:#9ab}
@@ -65,17 +69,19 @@
 </head>
 <body>
 <div id="topBar">
-<div id="hint">WASD 또는 왼쪽 아래 조이스틱으로 이동(내 아바타는 햄스터) —
-  접속하면 매칭 서버가 빈 방에 자동으로 넣어준다. 수동 연결이 필요하면
-  오른쪽 패널에서 상대 ID로.</div>
+<div id="hint">WASD 또는 왼쪽 아래 조이스틱으로 이동, 벤치를 클릭/탭하면 앉는다
+  (다시 움직이면 일어남) — 접속하면 매칭 서버가 빈 방에 자동으로 넣어준다.</div>
 <div id="netPanel">
   내 ID: <span id="myId">연결 중…</span>
   <div>닉네임: <span id="nicknameDisplay"></span>
     <button id="changeNicknameBtn">변경</button></div>
   <div id="roomInfo">방 배정 중…</div>
-  <input id="remoteIdInput" placeholder="상대 ID 붙여넣기(수동)">
-  <button id="connectBtn">연결</button>
   <div id="peerList">연결된 상대: 없음</div>
+  <details id="manualConnect">
+    <summary>수동 연결(매칭 서버 없을 때만)</summary>
+    <input id="remoteIdInput" placeholder="상대 ID 붙여넣기">
+    <button id="connectBtn">연결</button>
+  </details>
 </div>
 </div>
 <div id="joystick" hidden><div id="joystickKnob"></div></div>
@@ -167,6 +173,66 @@ const floor = new THREE.Mesh(
 floor.rotation.x = -Math.PI/2;
 scene.add(floor);
 
+/* ---- 벤치(카페/공원 어느 쪽이든 쓸 수 있는 범용 좌석 소품) ----
+   나무 판(좌석+등받이) + 다리 4개, 전부 박스 지오메트리. 팔레트는 햄스터와
+   겹치지 않는 나무/금속 톤 몇 가지로 고정(ART_STYLE 1번 — 색 즉석 생성 금지).
+   group.userData.seatOffset/seatYaw로 "앉았을 때 아바타가 있어야 할 자리"를
+   따로 들고 있어서, 벤치를 씬 어디에 놓고 돌려도 앉기 좌표 계산이 그대로
+   맞게 한다. */
+const BENCH_PALETTE = { wood: 0xb98a55, woodDark: 0x8a6239, metal: 0x53585c };
+
+function buildBench(){
+  const woodMat  = new THREE.MeshStandardMaterial({color:BENCH_PALETTE.wood, roughness:0.8});
+  const metalMat = new THREE.MeshStandardMaterial({color:BENCH_PALETTE.metal, roughness:0.6, metalness:0.3});
+
+  const group = new THREE.Group();
+
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.08, 0.42), woodMat);
+  seat.position.y = 0.42;
+  group.add(seat);
+
+  const back = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.5, 0.08), woodMat);
+  back.position.set(0, 0.67, -0.17);
+  back.rotation.x = -0.15;
+  group.add(back);
+
+  const legGeo = new THREE.BoxGeometry(0.08, 0.42, 0.38);
+  [-0.52, 0.52].forEach(x=>{
+    const leg = new THREE.Mesh(legGeo, metalMat);
+    leg.position.set(x, 0.21, 0);
+    group.add(leg);
+  });
+
+  // 앉을 때 아바타가 있어야 할 자리(벤치 로컬 좌표) — 좌석 위, 등받이 반대쪽을
+  // 보고 앉게 살짝 앞쪽으로.
+  group.userData.seatOffset = new THREE.Vector3(0, 0.42, 0.1);
+  group.userData.seatYaw = 0;
+
+  return group;
+}
+
+const benches = [];
+function placeBench(x, z, rotY){
+  const bench = buildBench();
+  bench.position.set(x, 0, z);
+  bench.rotation.y = rotY;
+  scene.add(bench);
+  benches.push(bench);
+}
+// 바닥 원(반지름 8) 안쪽에 세 개를 둘러앉기 좋게 배치.
+placeBench(-3, -3, Math.PI*0.25);
+placeBench(3, -3, -Math.PI*0.25);
+placeBench(0, 4, Math.PI);
+
+function benchSeatWorld(bench){
+  const local = bench.userData.seatOffset.clone();
+  local.applyAxisAngle(new THREE.Vector3(0,1,0), bench.rotation.y);
+  return bench.position.clone().add(local);
+}
+function benchSeatYaw(bench){
+  return bench.rotation.y + bench.userData.seatYaw;
+}
+
 /* ---- 아바타: 귀여운 햄스터(프리미티브 조립) ----
    외부 에셋/저장소에 의존하지 않기 위해 glTF 로드 대신 Three.js 기본
    도형만 조합해서 만든다. 팔레트는 ART_STYLE 규칙대로 고정 색만 쓴다
@@ -246,12 +312,15 @@ function buildHamster(){
   nose.position.set(0, -0.05, 0.3);
   headPivot.add(nose);
 
-  // 발(앞/뒤 4개)
+  // 발(앞/뒤 4개) — sit 포즈에서 원래 자리로 되돌릴 수 있게 시작 좌표를
+  // userData에 저장해둔다(뒷발 2개는 앉을 때 몸 아래로 당겨야 해서 필요).
   const footGeo = new THREE.SphereGeometry(0.09, 12, 10);
   const feet = [[-0.16,-0.14],[0.16,-0.14],[-0.14,0.12],[0.14,0.12]].map(([x,z])=>{
     const f = new THREE.Mesh(footGeo, shadeMat);
     f.position.set(x, 0.09, z);
     f.scale.set(1, 0.7, 1);
+    f.userData.baseX = x;
+    f.userData.baseZ = z;
     bouncePivot.add(f);
     return f;
   });
@@ -267,7 +336,11 @@ function buildHamster(){
 /* 애니메이션 클립이 없으니 THREE.AnimationMixer 대신 상태(state)에 따라
    매 프레임 파츠를 직접 흔드는 가벼운 "가짜 mixer"를 쓴다. 호출부
    (spawnAvatar 사용처)는 이전과 동일하게 {model, mixer, playState}만
-   보고 쓰므로 위쪽 로직은 손댈 필요가 없다. */
+   보고 쓰므로 위쪽 로직은 손댈 필요가 없다. Idle/Walk에 이어 Sit도 여기서
+   포즈만 만든다 — 뼈대가 없어서 "진짜로 벤치에 걸터앉는" 자세는 아니고,
+   몸통을 낮추고 뒷발을 몸 아래로 당겨서 앉은 느낌만 낸다. */
+const SIT_DROP = 0.1; // 앉을 때 몸통이 내려앉는 높이
+
 async function spawnAvatar(){
   const parts = buildHamster();
   scene.add(parts.root);
@@ -278,16 +351,29 @@ async function spawnAvatar(){
     update(dt){
       t += dt;
       const walking = state === 'Walk';
-      const freq = walking ? 9 : 2.2;
-      const amp  = walking ? 0.05 : 0.02;
-      parts.bouncePivot.position.y = Math.abs(Math.sin(t*freq)) * amp;
+      const sitting = state === 'Sit';
+      const freq = walking ? 9 : (sitting ? 1.4 : 2.2);
+      const amp  = walking ? 0.05 : (sitting ? 0.01 : 0.02);
+      const baseY = sitting ? -SIT_DROP : 0;
+      parts.bouncePivot.position.y = baseY + Math.abs(Math.sin(t*freq)) * amp;
       const earWiggle = Math.sin(t*(walking?14:3)) * (walking?0.12:0.05);
       parts.earL.rotation.z =  earWiggle;
       parts.earR.rotation.z = -earWiggle;
       parts.headPivot.rotation.z = Math.sin(t*(walking?9:1.6)) * (walking?0.04:0.03);
+      parts.headPivot.rotation.x = sitting ? 0.12 : 0; // 앉으면 살짝 고개 숙임
       parts.feet.forEach((f,i)=>{
-        const phase = (i%2===0) ? 0 : Math.PI;
-        f.position.y = walking ? 0.09 + Math.max(0, Math.sin(t*freq*2+phase))*0.05 : 0.09;
+        const isBack = i>=2;
+        if(sitting){
+          // 뒷발은 몸 아래로 당기고, 앞발은 그대로 짚은 자세
+          f.position.x = f.userData.baseX;
+          f.position.z = isBack ? f.userData.baseZ - 0.1 : f.userData.baseZ;
+          f.position.y = isBack ? 0.03 : 0.09;
+        } else {
+          const phase = (i%2===0) ? 0 : Math.PI;
+          f.position.x = f.userData.baseX;
+          f.position.z = f.userData.baseZ;
+          f.position.y = walking ? 0.09 + Math.max(0, Math.sin(t*freq*2+phase))*0.05 : 0.09;
+        }
       });
     },
   };
@@ -366,6 +452,16 @@ if(isTouchDevice){
 
 const moveDir = new THREE.Vector3();
 let myState = 'Idle';
+let isSitting = false;
+
+function standUp(){
+  if(!isSitting) return;
+  isSitting = false;
+  myState = 'Idle';
+  me.playState('Idle');
+  netSendStateSoon();
+}
+
 function updateMyAvatar(dt){
   moveDir.set(
     (keys.KeyD?1:0)-(keys.KeyA?1:0) + joyVec.x,
@@ -373,6 +469,10 @@ function updateMyAvatar(dt){
     (keys.KeyS?1:0)-(keys.KeyW?1:0) + joyVec.z
   );
   const moving = moveDir.lengthSq()>0.01;
+  if(isSitting){
+    if(moving) standUp(); // 이동 입력이 들어오면 자동으로 일어남
+    else return; // 앉아있는 동안은 위치를 그대로 고정
+  }
   if(moving){
     moveDir.normalize();
     me.model.position.addScaledVector(moveDir, dt*2.2);
@@ -381,6 +481,30 @@ function updateMyAvatar(dt){
   const nextState = moving ? 'Walk' : 'Idle';
   if(nextState!==myState){ myState=nextState; me.playState(myState); netSendStateSoon(); }
 }
+
+/* ---- 벤치 클릭/탭으로 앉기 ----
+   조이스틱은 #joystick 전용 엘리먼트에서만 포인터를 가로채므로 캔버스
+   click과 안 꼬인다. 다시 벤치를 클릭하거나 이동하면 일어난다. */
+const raycaster = new THREE.Raycaster();
+const pointerNDC = new THREE.Vector2();
+function sitOnBench(bench){
+  me.model.position.copy(benchSeatWorld(bench));
+  me.model.rotation.y = benchSeatYaw(bench);
+  isSitting = true;
+  myState = 'Sit';
+  me.playState('Sit');
+  netSendStateSoon();
+}
+renderer.domElement.addEventListener('click', (e)=>{
+  pointerNDC.x = (e.clientX/innerWidth)*2 - 1;
+  pointerNDC.y = -(e.clientY/innerHeight)*2 + 1;
+  raycaster.setFromCamera(pointerNDC, camera);
+  const hits = raycaster.intersectObjects(benches, true);
+  if(!hits.length) return;
+  let obj = hits[0].object;
+  while(obj.parent && !benches.includes(obj)) obj = obj.parent;
+  if(benches.includes(obj)) sitOnBench(obj);
+});
 
 /* ---- 카메라: 내 아바타를 뒤에서 살짝 위에서 따라간다 ---- */
 function updateCamera(){
