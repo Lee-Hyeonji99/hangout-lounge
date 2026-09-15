@@ -189,10 +189,26 @@
   #nicknameDisplay{color:#fd8}
   #changeNicknameBtn{font-size:11px;padding:2px 7px !important}
 
-  /* ---- 아바타 머리 위 닉네임 라벨 ---- */
+  /* ---- 아바타 머리 위 닉네임 라벨 + 채팅 말풍선 ----
+     예전엔 닉네임 라벨 하나를 채팅 중엔 "닉네임: 메시지"로 통째로
+     바꿔치기했는데, 그러면 글자 수가 늘어난 만큼 폭이 넓어져서 근처에
+     서 있는 다른 사람 이름표를 가리는 문제가 있었다(제보됨: "말풍선
+     위치때문에 다른사람 이름표를 가림"). 닉네임(.nameLabel)은 항상
+     그대로 두고, 말풍선(.chatBubble)을 그 위에 별도로 쌓아서(둘 다 같은
+     .nameLabelWrap 안에서 아래→위 순서) 닉네임을 안 가리게 하고, 말풍선
+     자체도 word-wrap으로 최대 폭을 제한해서 옆 사람 쪽으로 무한정
+     넓어지지 않게 했다. */
   #labelLayer{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-  .nameLabel{position:absolute;left:0;top:0;background:#0009;color:#fff;
+  .nameLabelWrap{position:absolute;left:0;top:0;display:flex;
+    flex-direction:column-reverse;align-items:center;gap:4px}
+  .nameLabel{background:#0009;color:#fff;
     font-size:12px;padding:2px 7px;border-radius:6px;white-space:nowrap}
+  .chatBubble{background:#1c1c22ee;color:#fff;border:1px solid #445;
+    font-size:12px;padding:5px 9px;border-radius:10px;
+    max-width:160px;white-space:normal;word-break:break-word;text-align:center;
+    opacity:0;transform:translateY(4px);
+    transition:opacity 0.2s,transform 0.2s}
+  .chatBubble.show{opacity:1;transform:translateY(0)}
 </style>
 <script type="importmap">
 { "imports": { "three": "./lib/vendor/three/build/three.module.js" } }
@@ -1251,11 +1267,17 @@ async function main(myNickname){
    좌표로 직접 projection해서 평범한 절대 위치 div를 그 자리에 둔다. */
 const labelLayerEl = document.getElementById('labelLayer');
 function createNameLabel(text){
-  const el = document.createElement('div');
-  el.className = 'nameLabel';
-  el.textContent = text;
-  labelLayerEl.appendChild(el);
-  return el;
+  const wrap = document.createElement('div');
+  wrap.className = 'nameLabelWrap';
+  wrap.nameEl = document.createElement('div');
+  wrap.nameEl.className = 'nameLabel';
+  wrap.nameEl.textContent = text;
+  wrap.bubbleEl = document.createElement('div');
+  wrap.bubbleEl.className = 'chatBubble';
+  wrap.appendChild(wrap.nameEl); // column-reverse라 DOM 순서상 먼저 넣은 게 아래(닉네임)
+  wrap.appendChild(wrap.bubbleEl);
+  labelLayerEl.appendChild(wrap);
+  return wrap;
 }
 const labelProjectVec = new THREE.Vector3();
 function updateLabelPosition(labelEl, model){
@@ -1287,9 +1309,12 @@ function appendChatLine(nickname, text){
 function showChatBubble(target, nickname, text){
   if(!target.nameLabelEl) return;
   clearTimeout(target.chatBubbleTimer);
-  target.nameLabelEl.textContent = `${nickname}: ${text}`;
+  // 닉네임 라벨(.nameEl)은 안 건드리고 말풍선(.bubbleEl)만 따로 채워서
+  // 보여준다 — 닉네임이 안 가려짐(위 CSS 주석 참고).
+  target.nameLabelEl.bubbleEl.textContent = text;
+  target.nameLabelEl.bubbleEl.classList.add('show');
   target.chatBubbleTimer = setTimeout(()=>{
-    target.nameLabelEl.textContent = nickname;
+    target.nameLabelEl.bubbleEl.classList.remove('show');
   }, 4000);
 }
 
@@ -1765,7 +1790,7 @@ function renameMyNickname(newName){
   myNickname = newName;
   nicknameDisplayEl.textContent = myNickname;
   saveNickname(myNickname);
-  if(me.nameLabelEl) me.nameLabelEl.textContent = myNickname;
+  if(me.nameLabelEl) me.nameLabelEl.nameEl.textContent = myNickname;
   mesh.broadcast({type:'nickname', name: myNickname});
 }
 
@@ -1887,7 +1912,7 @@ const mesh = createMesh({
       if(av.nickname) usedNicknames.delete(av.nickname);
       av.nickname = msg.name;
       usedNicknames.add(msg.name);
-      if(av.nameLabelEl) av.nameLabelEl.textContent = msg.name;
+      if(av.nameLabelEl) av.nameLabelEl.nameEl.textContent = msg.name;
       resolveNicknameCollision();
       if(!announcedJoin.has(fromId)){
         announcedJoin.add(fromId);
