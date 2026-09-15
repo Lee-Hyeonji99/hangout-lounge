@@ -39,6 +39,19 @@ JIRA_PROJECT_KEY=SCRUM   # 생략 시 기본값 SCRUM
 이 환경변수도 안 넣으면(매칭 서버와 같은 방침) 버그 신고 기능만 조용히
 꺼진 채로 사이트는 정상 동작한다.
 
+**일부 네트워크(대칭형 NAT 등)에서 P2P 연결이 아예 안 되는 문제를
+줄이려면**(`api/turn.js`) [metered.ca](https://www.metered.ca) 무료 가입
+후 아래 환경변수를 추가한다(대시보드의 "TURN Server Credentials"에서
+확인):
+
+```
+METERED_DOMAIN=xxx.metered.live
+METERED_API_KEY=<발급받은 키>
+```
+
+안 넣으면 기존처럼 STUN만 쓰고(일부 네트워크 조합에서 연결 실패 가능),
+넣으면 STUN으로 직접 연결이 안 될 때 TURN 중계로 자동 대체된다.
+
 ## 진행 상태
 
 `docs/PLAN.md`의 "8. 구현 순서" 참고 — 현재 3단계(WebRTC 메시 연결)까지 코드

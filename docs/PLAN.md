@@ -82,6 +82,27 @@ P2P 직접 연결 자체가 실패한다 — 코드 버그가 아니라 present�
 전에 미리 경고) 넘게 아무 데이터도 안 오면 나타난다. 평소엔 완전히
 숨김.
 
+**후속 조치 — TURN 서버 실제로 도입**: 위에서 "재검토 시점이 오면"이라고
+남겨뒀던 그 시점(아이폰에서 실제로 연결 안 되는 사례 재현됨)이 와서
+진행. 자체 운영(coturn on VPS)과 관리형(Metered.ca 등) 두 안을 비교한
+결과 관리형 쪽으로 결정 — TURN은 어차피 정적 호스팅(Vercel이든 다른
+어디든)과 무관하게 항상 켜져 있는 별도 서버가 필요해서 "Vercel 위에
+직접 올리기"는 애초에 불가능(서버리스 함수는 UDP 릴레이용 상시 프로세스를
+못 돌림)하고, 자체 VPS 운영은 이 저장소의 "정적 파일 + 빌드 없음" 원칙을
+크게 깨는 데 비해 관리형은 API 키 중개용 서버리스 함수 하나만 추가하면
+돼서 기존 room.js/bugreport.js와 같은 결. 구현(`api/turn.js`,
+`lib/webrtc-mesh.js`, `index.html`):
+- `api/turn.js` — `METERED_DOMAIN`/`METERED_API_KEY` 환경변수로 Metered.ca의
+  TURN 자격증명 발급 API를 대신 호출해서 클라이언트에 돌려준다(API 키를
+  클라이언트에 노출 안 하려고). 환경변수 없으면 501 → 클라이언트는 조용히
+  무시하고 기존처럼 STUN만 사용(매칭 서버와 같은 "있으면 좋고 없어도 됨"
+  방침, 아직 실제 계정 가입/키 등록은 안 됨 — 사용자가 나중에 해야 함).
+- `lib/webrtc-mesh.js`의 `createMesh`가 `iceServers` 옵션을 받아서
+  `new window.Peer(peerId, {config:{iceServers}})`로 넘긴다(안 넘기면
+  기존과 동일하게 PeerJS 기본 설정).
+- `index.html`이 `mesh` 만들기 전에 `/api/turn`을 먼저 fetch해서 받아온
+  `iceServers`를 넘겨준다.
+
 ## 4. 상태 동기화 설계
 
 무엇을, 얼마나 자주, 어떤 채널로 보낼지가 네트워크 설계의 핵심.

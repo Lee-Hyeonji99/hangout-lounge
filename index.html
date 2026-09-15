@@ -1715,7 +1715,21 @@ function logEvent(text){
 }
 const announcedJoin = new Set(); // 닉네임이 도착한 시점에 한 번만 "입장" 로그를 남기기 위함
 
+// TURN 자격증명(api/turn.js) — 환경변수 미설정/요청 실패 시 그냥 null로
+// 넘어가고 createMesh가 기존처럼 STUN만으로 동작한다(매칭 서버와 같은
+// "있으면 좋고 없어도 됨" 방침).
+async function fetchIceServers(){
+  try {
+    const r = await fetch('/api/turn');
+    if(!r.ok) return null;
+    const data = await r.json();
+    return data.iceServers || null;
+  } catch { return null; }
+}
+const iceServers = await fetchIceServers();
+
 const mesh = createMesh({
+  iceServers,
   onPeerJoin: async (id)=>{
     updatePeerList();
     if(!remoteAvatars.has(id)){
