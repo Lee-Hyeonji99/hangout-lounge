@@ -16,7 +16,16 @@ python3 -m http.server 8000
 # http://localhost:8000/index.html
 ```
 
+## 배포(Vercel)
+
+정적 파일이라 저장소 연결 → 그대로 배포하면 대부분 동작한다. 단, **방 자동
+배정(매칭 서버, `api/room.js`)이 동작하려면 Vercel 프로젝트에 Upstash Redis
+연동을 추가**해야 한다(대시보드 → Storage → Upstash for Redis 연결 → 자동으로
+`KV_REST_API_URL`/`KV_REST_API_TOKEN` 환경변수 주입). 연동을 안 해도 사이트
+자체는 그대로 열리고, 방 자동 배정만 꺼진 채로 수동 "상대 ID 붙여넣기"로
+동작한다(`index.html` 우측 패널).
+
 ## 진행 상태
 
-지금은 1단계(로컬 프로토타입) — 네트워킹 없이 아바타 하나 + 카메라만 있다.
-다음 단계는 `docs/PLAN.md`의 "8. 구현 순서" 참고.
+`docs/PLAN.md`의 "8. 구현 순서" 참고 — 현재 3단계(WebRTC 메시 연결)까지 코드
+있음 + 오토 인스턴싱(매칭 서버) 추가됨.

@@ -16,6 +16,7 @@
   #netPanel button{font:inherit;padding:5px 9px;border-radius:5px;border:1px solid #567;background:#234;color:#cde;cursor:pointer}
   #netPanel button:hover{background:#345}
   #myId{font-family:monospace;color:#8fd}
+  #roomInfo{font-size:11px;color:#9ab}
   #peerList{font-size:11px;color:#9ab}
 </style>
 <script type="importmap">
@@ -24,11 +25,13 @@
 <script src="./lib/vendor/peerjs/peerjs.min.js"></script>
 </head>
 <body>
-<div id="hint">3단계: WebRTC 메시 연결 — WASD로 이동(내 아바타는 햄스터), 오른쪽
-  패널에서 다른 탭의 ID로 연결. docs/PLAN.md 8번 참고.</div>
+<div id="hint">WASD로 이동(내 아바타는 햄스터) — 접속하면 매칭 서버가 빈 방에
+  자동으로 넣어준다. 수동 연결이 필요하면 오른쪽 패널에서 상대 ID로.
+  docs/PLAN.md 8번 참고.</div>
 <div id="netPanel">
   내 ID: <span id="myId">연결 중…</span>
-  <input id="remoteIdInput" placeholder="상대 ID 붙여넣기">
+  <div id="roomInfo">방 배정 중…</div>
+  <input id="remoteIdInput" placeholder="상대 ID 붙여넣기(수동)">
   <button id="connectBtn">연결</button>
   <div id="peerList">연결된 상대: 없음</div>
 </div>
@@ -275,12 +278,58 @@ function updatePeerList(){
   peerListEl.textContent = '연결된 상대: ' + (ids.length ? ids.join(', ') : '없음');
 }
 
-mesh.ready().then(id=>{
+/* ---- 방 자동 배정(오토 인스턴싱, docs/PLAN.md 6번) ----
+   api/room.js(Vercel 서버리스 함수)가 방별 인원(최대 12명)을 추적해서 빈
+   방을 배정해준다. 로컬 정적 서버(python3 -m http.server)나 아직 Redis
+   연동 전인 배포에선 /api/room이 없거나 실패하는 게 정상이다 — 그럴 땐
+   콘솔 경고만 남기고 조용히 넘어가서, 기존 수동 "상대 ID 붙여넣기"로
+   계속 쓸 수 있게 한다(매칭 서버는 있으면 좋은 보강 기능이지 필수는 아님). */
+const roomInfoEl = document.getElementById('roomInfo');
+let myRoomId = null;
+
+async function autoJoinRoom(myId){
+  const r = await fetch('/api/room?action=join', {
+    method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({peerId: myId}),
+  });
+  if(!r.ok) throw new Error('status '+r.status);
+  const {roomId, peers} = await r.json();
+  myRoomId = roomId;
+  roomInfoEl.textContent = '방 #' + roomId;
+  peers.forEach(id=>mesh.connectTo(id));
+  startRoomHeartbeat();
+}
+
+function startRoomHeartbeat(){
+  setInterval(()=>{
+    if(!myRoomId) return;
+    fetch('/api/room?action=heartbeat', {
+      method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({peerId: mesh.peerId, roomId: myRoomId}),
+    }).catch(()=>{}); // 실패해도 다음 하트비트가 또 오니 그냥 넘어간다
+  }, 15000);
+
+  addEventListener('pagehide', ()=>{
+    if(!myRoomId) return;
+    const blob = new Blob([JSON.stringify({peerId: mesh.peerId, roomId: myRoomId})],
+      {type:'application/json'});
+    navigator.sendBeacon('/api/room?action=leave', blob);
+  });
+}
+
+mesh.ready().then(async id=>{
   myIdEl.textContent = id;
-  // 편의를 위해 ?connect=<id> 로 열면 자동으로 상대에게 연결(2탭 테스트용).
+  // ?connect=<id> 로 열면 매칭 서버를 건너뛰고 그 상대에게 바로 연결(수동
+  // 2탭 테스트, 또는 매칭 서버가 없는 환경에서의 디버깅용).
   const params = new URLSearchParams(location.search);
   const target = params.get('connect');
-  if(target) mesh.connectTo(target);
+  if(target){ mesh.connectTo(target); roomInfoEl.textContent = '수동 연결 모드'; return; }
+  try{
+    await autoJoinRoom(id);
+  }catch(err){
+    roomInfoEl.textContent = '매칭 서버 없음(수동 연결만 가능)';
+    console.warn('[hangout-lounge] 방 자동 배정 실패 — 로컬 개발/매칭 서버 미설정 환경일 수 있음:', err.message);
+  }
 });
 
 document.getElementById('connectBtn').addEventListener('click', ()=>{
