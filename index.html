@@ -7,6 +7,13 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
+  /* 더블탭/더블클릭으로 브라우저 확대(핀치줌 제스처로 인식)되고 다시
+     축소가 안 되는 문제 제보 — 캔버스(renderer.domElement)엔 이미
+     touch-action:none을 걸어뒀지만 그건 캔버스 영역에만 적용되고,
+     UI 버튼/빈 배경 등 페이지 전체에서 더블탭하면 여전히 브라우저
+     기본 줌 제스처가 걸릴 수 있어서 문서 전체에 적용. manipulation은
+     더블탭 확대만 막고 한 손가락 탭/스크롤은 그대로 둔다. */
+  html,body{touch-action:manipulation}
   body{background:#111;color:#eee;font-family:system-ui,sans-serif;overflow:hidden}
   #topBar{position:absolute;left:14px;right:14px;
     top:calc(14px + env(safe-area-inset-top,0px));
@@ -1382,6 +1389,14 @@ function sendChatMessage(){
 chatInputEl.addEventListener('keydown', (e)=>{
   e.stopPropagation(); // 만약을 위해 — 게임 단축키 쪽으로 새지 않게
   if(e.key === 'Enter'){
+    // 한글 등 IME로 글자를 조합하는 도중 누르는 Enter는 "마지막 글자
+    // 확정"용이지 전송 의도가 아닌데, e.isComposing 체크 없이 그냥
+    // 보내면 조합 중이던 글자가 아직 안 끝난 상태로 한 번 전송되고,
+    // 조합이 마무리되면서 keydown이 한 번 더 들어와 또 전송돼버려서
+    // "나만 두 번씩 반복되고 뒷글자가 바뀐다"는 버그로 나타났다(IME
+    // 조합 중 Enter를 처리하는 브라우저들의 흔한 함정). 조합 중이면
+    // 이 Enter는 무시하고 조합이 끝난 뒤 Enter를 다시 눌러야 전송되게.
+    if(e.isComposing) return;
     sendChatMessage();
   } else if(e.key === 'Escape'){
     chatInputEl.value = '';
@@ -1811,6 +1826,15 @@ const mesh = createMesh({
     if(!remoteAvatars.has(id)){
       const av = await spawnAvatar();
       av.model.position.set(0,0,0);
+      // 실제 위치를 아직 몰라서 원점(0,0,0)에 임시로 둔 상태 — 이대로
+      // 보이게 하면 첫 pos 메시지가 도착할 때 원점에서 실제 위치까지
+      // "순간이동"하는 것처럼 보인다(연결이 끊겼다 재연결될 때 특히
+      // 눈에 띈다고 제보됨 — 재연결 시 유령 접속 감지 워치독이 기존
+      // 아바타를 지우고 여기서 새로 만들기 때문에 매번 이 경로를 탄다).
+      // 첫 pos 메시지가 올 때까지 숨겨뒀다가, 그 위치에 바로(보간 없이)
+      // 배치한 뒤에 보이게 해서 빈 자리에서 스윽 나타나는 것처럼 처리.
+      av.model.visible = false;
+      av.gotFirstPos = false;
       av.nameLabelEl = createNameLabel('…');
       av.lastMsgAt = performance.now(); // 아래 유령 접속 감지용
       remoteAvatars.set(id, {...av, targetPos:av.model.position.clone(), targetYaw:0});
@@ -1847,6 +1871,15 @@ const mesh = createMesh({
     if(msg.type==='pos'){
       av.targetPos.set(msg.x, msg.y, msg.z);
       av.targetYaw = msg.yaw;
+      if(!av.gotFirstPos){
+        // 첫 위치는 보간하지 않고 바로 그 자리에 배치한 다음 보이게
+        // 한다(위 onPeerJoin 참고) — 원점에서부터 스르륵 미끄러져
+        // 오거나 순간이동하는 것처럼 보이는 걸 막는다.
+        av.model.position.copy(av.targetPos);
+        av.model.rotation.y = av.targetYaw;
+        av.model.visible = true;
+        av.gotFirstPos = true;
+      }
     } else if(msg.type==='state'){
       av.playState(msg.state);
       av.currentState = msg.state; // 벤치 좌석 점유 판정에 씀(아래 isSeatOccupied)
@@ -1992,7 +2025,12 @@ function netSendStateSoon(){
    마지막으로 받은 스냅샷(targetPos/targetYaw)을 향해 매 프레임 조금씩
    따라간다 — 뚝뚝 끊기지 않게(docs/PLAN.md 4번, 로블록스와 같은 원리). */
 function updateRemoteAvatars(dt){
-  const lerpT = Math.min(1, dt*10);
+  // 프레임 하나에서 한 번에 100% 따라잡지 않게 상한을 둔다(0.35) — 안 그러면
+  // 네트워크가 잠깐 끊겼다가 몰아서 위치가 들어올 때 dt가 커져서(탭이 잠깐
+  // 백그라운드였거나 프레임이 밀렸거나) lerpT가 1이 돼버려 그 프레임에서
+  // 바로 목표 위치로 순간이동해버린다("순간이동해" 제보). 상한을 두면 몇
+  // 프레임에 걸쳐 빠르게 미끄러지듯 따라잡아서 덜 튄다.
+  const lerpT = Math.min(0.35, dt*10);
   remoteAvatars.forEach(av=>{
     av.model.position.lerp(av.targetPos, lerpT);
     // 각도는 최단 경로로 보간
