@@ -1942,8 +1942,18 @@ const STALE_PEER_TIMEOUT = 25000;
 // STALE_PEER_TIMEOUT을 올린 것과 같은 이유로 이 값도 같이 올렸다 —
 // 안 그러면 잠깐의 백그라운드 전환에도 경고 아이콘이 계속 깜빡여서
 // 마찬가지로 성가시다.
-const CONN_WARN_TIMEOUT = 8000;
+//
+// **버그였다가 고침 — 연결 정상인데도 계속 깜빡거림**: 8초까지 올렸는데도
+// 실사용에서 계속 깜빡인다는 제보. 두 가지를 더 손봤다. (1)
+// `navigator.onLine`은 브라우저/네트워크 드라이버에 따라 실제로는 멀쩡한데
+// 순간적으로 false를 잘못 보고하는 경우가 알려져 있어서(특히 VPN/특정
+// 네트워크 어댑터), 이것 하나만으로 즉시 깜빡이지 않게 함. (2) 한 번
+// "나쁨"으로 측정됐다고 바로 아이콘을 켜지 않고, 연속 2번(4초 간격)
+// 계속 나쁠 때만 켠다(히스테리시스) — 짧은 순간의 프레임 지연/네트워크
+// 잔떨림 한 번으로 깜빡이는 걸 걸러낸다. 임계값 자체도 15초로 다시 올림.
+const CONN_WARN_TIMEOUT = 15000;
 const connWarnIconEl = document.getElementById('connWarnIcon');
+let connWarnBadStreak = 0;
 function updateConnWarnIcon(){
   let bad = !navigator.onLine;
   if(!bad){
@@ -1952,7 +1962,8 @@ function updateConnWarnIcon(){
       if(now - av.lastMsgAt > CONN_WARN_TIMEOUT){ bad = true; break; }
     }
   }
-  connWarnIconEl.hidden = !bad;
+  connWarnBadStreak = bad ? connWarnBadStreak + 1 : 0;
+  connWarnIconEl.hidden = connWarnBadStreak < 2;
 }
 addEventListener('online', updateConnWarnIcon);
 addEventListener('offline', updateConnWarnIcon);
