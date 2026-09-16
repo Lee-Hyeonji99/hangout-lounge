@@ -90,29 +90,27 @@
   #gameInvitePrompt button:hover{filter:brightness(1.2)}
 
   /* ---- 게임 보드 모달(외형 꾸미기와 같은 패턴) ---- */
-  #gameModal{position:fixed;inset:0;background:#000a;z-index:11;
-    display:flex;align-items:center;justify-content:center;padding:20px}
-  #gameModal[hidden]{display:none}
-  #gameBox{background:#1c1c22;border:1px solid #445;border-radius:14px;
-    padding:18px 20px;max-width:420px;width:100%;color:#ddd}
-  #gameHeader{display:flex;justify-content:space-between;align-items:center;
-    font-size:15px;color:#fff;margin-bottom:8px}
-  #gameHeader button{background:none;border:none;color:#9ab;cursor:pointer;padding:4px}
-  #gameHeader button:hover{color:#fff}
-  #gameStatus{font-size:12px;color:#9ab;margin-bottom:10px;min-height:16px}
-  #gameBoard{display:grid;gap:3px;justify-content:center}
-  .gameCell{width:28px;height:28px;background:#242430;border:1px solid #445;
-    border-radius:3px;display:flex;align-items:center;justify-content:center;
-    cursor:pointer;font-size:16px;font-weight:700;color:#fff;user-select:none}
-  .gameCell:hover:not(.filled){background:#2e2e3c}
-  .gameCell.mark-x{color:#7cf}
-  .gameCell.mark-o{color:#fb8}
-  #gameFooter{display:flex;align-items:center;justify-content:space-between;
-    margin-top:12px;font-size:13px}
+  /* ---- 미니게임 HUD(화면을 안 가리는 작은 상태줄) ----
+     게임판 자체는 테이블 위에 3D로 렌더링돼서(openGameOnTable, 아래
+     스크립트) 화면을 가리는 모달이 필요 없다 — 이 바는 제목/차례/나가기
+     정도만 보여주는 작은 알림줄. "테이블 위에 판을 올려놓고 그림처럼
+     직접 그리는 것처럼" + "게임 중인 사람만 그 테이블에 카메라 고정"
+     요청으로 기존 DOM 모달/그리드 클릭 방식에서 전환. */
+  #gameHud{position:absolute;left:50%;top:calc(70px + env(safe-area-inset-top,0px));
+    transform:translateX(-50%);background:#1c1c22ee;border:1px solid #445;
+    border-radius:10px;padding:8px 14px;display:flex;align-items:center;
+    gap:12px;font-size:13px;color:#eee;z-index:6}
+  #gameHud[hidden]{display:none}
+  #gameTitle{color:#fff;font-weight:600}
+  #gameStatus{color:#9ab}
+  #gameFooter{display:flex;align-items:center;gap:8px}
   #gameFooter[hidden]{display:none}
-  #gameRematchBtn{font:inherit;padding:6px 12px;border-radius:6px;border:1px solid #567;
+  #gameRematchBtn{font:inherit;padding:4px 10px;border-radius:6px;border:1px solid #567;
     background:#234;color:#cde;cursor:pointer}
   #gameRematchBtn:hover{background:#345}
+  #gameCloseBtn{background:none;border:none;color:#9ab;cursor:pointer;padding:2px;
+    display:flex;align-items:center}
+  #gameCloseBtn:hover{color:#fff}
 
   /* ---- 외형 꾸미기: 게임 화면을 안 가리는 모달로(예전엔 우측 패널에 늘
      펼쳐져 있어서 시야를 가린다는 피드백으로 변경) ---- */
@@ -149,16 +147,24 @@
   .toast.show{opacity:1;transform:translateY(0)}
   #myId{font-family:monospace;color:#8fd}
 
-  /* ---- 채팅(우측 하단 고정) ----
+  /* ---- 채팅(우측 하단 기본 위치, 드래그로 옮길 수 있음) ----
      예전엔 우측 상단 정보 패널(#netPanel) 안에 있었는데, PC에서 "채팅창
      위치를 바꾸는 게 좋겠다(오른쪽 아래)"는 요청으로 독립된 패널로
      분리했다 — 담배 버튼 바로 위(감정표현 메뉴가 뜨는 높이와 동일한
-     오프셋)에 자리잡아서 다른 하단 UI와 안 겹친다. */
+     오프셋)에 자리잡았는데, 화면 크기/감정표현 메뉴 위치에 따라 여전히
+     겹칠 수 있다는 후속 제보로 헤더(#chatPanelHeader)를 잡고 드래그해서
+     옮길 수 있게 함. 드래그하기 전엔 기존처럼 bottom/right로 고정, 한
+     번이라도 드래그하면 그 뒤로는 left/top 절대좌표로 전환(localStorage에
+     저장해서 새로고침해도 유지). */
   #chatPanel{position:absolute;right:14px;
     bottom:calc(24px + 56px + 14px + env(safe-area-inset-bottom,0px));
     width:230px;max-width:calc(100vw - 28px);
     background:#0009;padding:8px 10px;border-radius:8px;
     display:flex;flex-direction:column;gap:6px;z-index:4}
+  #chatPanelHeader{font-size:11px;color:#9ab;cursor:grab;
+    padding:2px 2px 4px;margin:-2px -2px 0;
+    border-bottom:1px solid #345;user-select:none;touch-action:none}
+  #chatPanelHeader:active{cursor:grabbing}
   #chatLog{font-size:12px;color:#ddd;max-height:110px;overflow-y:auto;
     display:flex;flex-direction:column;gap:3px}
   #chatLog b{color:#9cf;font-weight:600}
@@ -327,6 +333,7 @@
 </div>
 </div>
 <div id="chatPanel">
+  <div id="chatPanelHeader" title="드래그해서 옮기기">채팅</div>
   <div id="chatLog"></div>
   <div id="chatInputRow">
     <input id="chatInput" placeholder="메시지 입력" maxlength="200">
@@ -395,21 +402,19 @@
 <div id="labelLayer"></div>
 <div id="toastLayer"></div>
 
-<div id="gameModal" hidden>
-  <div id="gameBox">
-    <div id="gameHeader">
-      <span id="gameTitle"></span>
-      <button id="gameCloseBtn" title="나가기">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>
-      </button>
-    </div>
-    <div id="gameStatus"></div>
-    <div id="gameBoard"></div>
-    <div id="gameFooter" hidden>
-      <span id="gameResultText"></span>
-      <button id="gameRematchBtn">다시하기</button>
-    </div>
+<!-- 게임판 자체는 테이블 위에 3D로 렌더링된다(openGameOnTable 참고) —
+     이 HUD는 화면을 가리지 않는 작은 상태 표시줄(제목/차례/나가기,
+     끝나면 결과+다시하기)만 담당. -->
+<div id="gameHud" hidden>
+  <span id="gameTitle"></span>
+  <span id="gameStatus"></span>
+  <div id="gameFooter" hidden>
+    <span id="gameResultText"></span>
+    <button id="gameRematchBtn">다시하기</button>
   </div>
+  <button id="gameCloseBtn" title="나가기">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>
+  </button>
 </div>
 
 <div id="appearanceModal" hidden>
@@ -801,11 +806,13 @@ function buildStool(){
 }
 const cafeProps = []; // 테이블/스툴 — 콜리전용(테이블은 못 앉음)
 const stools = []; // 스툴만 따로 — 벤치처럼 클릭해서 앉을 수 있음(버그로 제보돼 추가)
+const cafeTables = []; // 테이블만 따로 — 미니게임판을 테이블 위에 올릴 때 가까운 테이블 찾는 용도
 function placeCafeTable(x, z){
   const table = buildCafeTable();
   table.position.set(x, 0, z);
   scene.add(table);
   cafeProps.push(table);
+  cafeTables.push(table);
   [[-0.65,0],[0.65,0],[0,-0.65],[0,0.65]].forEach(([dx,dz])=>{
     const stool = buildStool();
     stool.position.set(x+dx, 0, z+dz);
@@ -1513,6 +1520,55 @@ document.getElementById('chatSendBtn').addEventListener('click', ()=>{
   chatInputEl.focus(); // 버튼 탭 후에도 계속 이어서 칠 수 있게(모바일도 동일 이유)
 });
 
+// 채팅창 드래그 이동 — 감정표현 메뉴랑 겹친다는 제보로 헤더를 잡고 옮길
+// 수 있게 함. 벤치 클릭이나 카메라 드래그와 안 꼬이게 pointerdown이
+// 캔버스로 새지 않게 stopPropagation, 카메라 드래그처럼 Pointer Events로
+// 마우스/터치 동시 지원.
+const chatPanelEl = document.getElementById('chatPanel');
+const CHAT_POS_KEY = 'hangout-lounge:chatPanelPos';
+(function restoreChatPanelPos(){
+  try {
+    const saved = JSON.parse(localStorage.getItem(CHAT_POS_KEY));
+    if(saved && typeof saved.left === 'number' && typeof saved.top === 'number'){
+      chatPanelEl.style.left = saved.left + 'px';
+      chatPanelEl.style.top = saved.top + 'px';
+      chatPanelEl.style.right = 'auto';
+      chatPanelEl.style.bottom = 'auto';
+    }
+  } catch {} // 저장된 값이 없거나 깨졌으면 그냥 기본 위치(우측 하단) 사용
+})();
+let chatDragPointerId = null, chatDragOffsetX = 0, chatDragOffsetY = 0;
+document.getElementById('chatPanelHeader').addEventListener('pointerdown', (e)=>{
+  e.stopPropagation();
+  chatDragPointerId = e.pointerId;
+  const rect = chatPanelEl.getBoundingClientRect();
+  chatDragOffsetX = e.clientX - rect.left;
+  chatDragOffsetY = e.clientY - rect.top;
+  e.target.setPointerCapture(chatDragPointerId);
+});
+document.getElementById('chatPanelHeader').addEventListener('pointermove', (e)=>{
+  if(e.pointerId !== chatDragPointerId) return;
+  // 화면 밖으로 완전히 나가지 않게 여백만큼만 클램프.
+  const margin = 20;
+  const left = Math.min(innerWidth - margin, Math.max(margin - chatPanelEl.offsetWidth, e.clientX - chatDragOffsetX));
+  const top = Math.min(innerHeight - margin, Math.max(margin, e.clientY - chatDragOffsetY));
+  chatPanelEl.style.left = left + 'px';
+  chatPanelEl.style.top = top + 'px';
+  chatPanelEl.style.right = 'auto';
+  chatPanelEl.style.bottom = 'auto';
+});
+function endChatDrag(e){
+  if(e.pointerId !== chatDragPointerId) return;
+  chatDragPointerId = null;
+  try {
+    localStorage.setItem(CHAT_POS_KEY, JSON.stringify({
+      left: parseFloat(chatPanelEl.style.left), top: parseFloat(chatPanelEl.style.top),
+    }));
+  } catch {} // 프라이빗 모드 등에서 localStorage 막혀있으면 그냥 이번 세션만 유지
+}
+document.getElementById('chatPanelHeader').addEventListener('pointerup', endChatDrag);
+document.getElementById('chatPanelHeader').addEventListener('pointercancel', endChatDrag);
+
 // 버그 신고 — 텍스트만 써서 보내면 서버(api/bugreport.js)가 바로 Jira
 // 이슈로 만든다(kind:'manual'이라 dedup 없이 매번 새 이슈).
 const bugReportTextEl = document.getElementById('bugReportText');
@@ -1709,6 +1765,16 @@ renderer.domElement.addEventListener('click', (e)=>{
   pointerNDC.x = (e.clientX/innerWidth)*2 - 1;
   pointerNDC.y = -(e.clientY/innerHeight)*2 + 1;
   raycaster.setFromCamera(pointerNDC, camera);
+  // 미니게임판이 떠 있으면 그쪽 클릭을 먼저 확인(테이블 위에 올라온
+  // 판이라 벤치/스툴 판정과 안 겹침 — 게임 중엔 어차피 앉기 판정보다
+  // 게임판 클릭이 우선이어야 자연스럽다).
+  if(activeGameBoardMesh){
+    const gameHits = raycaster.intersectObject(activeGameBoardMesh);
+    if(gameHits.length && gameHits[0].uv){
+      onBoardClick(gameHits[0].uv);
+      return;
+    }
+  }
   // 앉을 수 있는 소품 = 벤치 + 카페 스툴("테이블 의자가 있는데 앉을 수
   // 없다"는 제보로 스툴도 포함시킴). 테이블 자체는 seatOffsets가 없어서
   // 원래부터 대상에서 빠짐.
@@ -1838,16 +1904,27 @@ renderer.domElement.addEventListener('pointermove', e=>{
 renderer.domElement.addEventListener('pointerup', e=>{ if(e.pointerId===dragPointerId) dragPointerId=null; });
 renderer.domElement.addEventListener('pointercancel', e=>{ if(e.pointerId===dragPointerId) dragPointerId=null; });
 
+// 미니게임 중엔(게임에 참여한 나만) 카메라 중심을 내 아바타 대신 게임판이
+// 놓인 테이블로 고정한다 — "게임 중일 때는 게임 중인 사람들만 그 테이블에
+// 카메라 조정"이라는 요청. 다른 사람(관전 안 됨, docs/PLAN.md 10번)한테는
+// 이 값이 항상 null이라 평소처럼 자기 아바타를 따라간다. 회전/줌 조작
+// (camYaw/camPitch/camDistCurrent)은 그대로 재사용 — 중심점만 바뀐다.
+let cameraFocusPoint = null;
 function updateCamera(dt){
   camDistCurrent += (camDistTarget - camDistCurrent) * Math.min(1, dt*6);
   const horizR = camDistCurrent * Math.cos(camPitch);
   const y = camDistCurrent * Math.sin(camPitch);
+  const focus = cameraFocusPoint || me.model.position;
+  // 아바타를 볼 땐 발밑이 아니라 상체 높이(+1)를 보게 하던 기존 오프셋을
+  // 유지하고, 테이블(cameraFocusPoint)을 볼 땐 그 지점 자체를 그대로 본다
+  // (이미 보드 높이로 미리 계산해서 넣어둠 — 아래 openGameOnTable 참고).
+  const lookY = focus.y + (cameraFocusPoint ? 0 : 1);
   camera.position.set(
-    me.model.position.x + horizR * Math.sin(camYaw),
-    me.model.position.y + y,
-    me.model.position.z + horizR * Math.cos(camYaw)
+    focus.x + horizR * Math.sin(camYaw),
+    lookY + y,
+    focus.z + horizR * Math.cos(camYaw)
   );
-  camera.lookAt(me.model.position.x, me.model.position.y+1, me.model.position.z);
+  camera.lookAt(focus.x, lookY, focus.z);
 }
 
 /* ---- 네트워킹 ----
@@ -1965,7 +2042,7 @@ const mesh = createMesh({
     updatePeerList();
     // 게임 상대가 끊기면 그 자리에서 게임판이 멈춰버리니(더 이상 응답
     // 올 리 없음) game_leave를 받은 것처럼 바로 정리한다.
-    if(activeGame && activeGame.opponentId === id) closeGameModal();
+    if(activeGame && activeGame.opponentId === id) closeGameBoard();
     if(pendingInvite && pendingInvite.fromId === id){
       pendingInvite = null;
       gameInvitePromptEl.hidden = true;
@@ -2041,14 +2118,52 @@ function updatePeerList(){
    상대에게만 sendTo — 방에 다른 사람이 있어도 그 사람들에게는 하나도
    안 감(broadcast가 아니라 sendTo를 쓰는 이유). 턴제라 같은 순서로
    메시지를 주고받는 한 양쪽 보드가 항상 똑같아지므로(결정론적), 이걸
-   조정해줄 서버가 따로 필요 없다. */
+   조정해줄 서버가 따로 필요 없다.
+
+   **후속 개선 — 게임판을 테이블 위에 3D로**: 처음엔 화면 중앙 DOM
+   모달(그리드를 <div>로) 방식이었는데, "별도 패널 말고 테이블 위에 판을
+   올려놓고 그림처럼 직접 그리는 것처럼", "게임 중일 때는 게임 중인
+   사람들만 그 테이블에 카메라 조정" 요청으로 전환:
+   - 게임판은 캔버스에 직접 그린 그림을 텍스처로 입힌 평면(PlaneGeometry)
+     — 담배 연기 텍스처(makeSmokeTexture)와 같은 "캔버스로 직접 그려서
+     텍스처로 쓰는" 패턴 재사용. 클릭은 그 평면에 레이캐스팅해서 나오는
+     UV 좌표로 칸을 계산(회전/월드 좌표를 직접 계산할 필요 없이 UV는
+     지오메트리 고유값이라 안 헷갈림).
+   - 초대를 보낼 때 내가 서 있는 자리에서 가까운 카페 테이블을 찾아서
+     (`findNearbyCafeTable`) 그 테이블 인덱스(`cafeTables` 배열의
+     순서 — 모든 클라이언트가 똑같은 코드로 맵을 만들어서 이 배열 순서도
+     항상 동일하니, 인덱스 하나만 보내도 양쪽이 같은 물리적 테이블을
+     가리킴)를 같이 보낸다. 카페 테이블 근처가 아니면 애초에 초대 목록
+     자체를 안 보여줌(실패할 초대를 굳이 시도하게 두지 않음).
+   - 게임 시작(`openGameOnTable`)하면 카메라 중심(`cameraFocusPoint`)을
+     그 테이블로 고정 — 나(게임 참가자)한테만 적용되고, 다른 사람 화면엔
+     아무 영향 없음(애초에 관전 불가라 다른 사람은 이 상태 자체를 모름).
+     게임이 끝나거나 나가면(`closeGameBoard`) 다시 내 아바타를 따라가는
+     원래 카메라로 복귀. */
 const MINIGAMES = {
   tictactoe: { name: '틱택토', size: 3, winLen: 3 },
   omok:      { name: '오목',   size: 13, winLen: 5 },
 };
+const TABLE_INVITE_MAX_DIST = 3; // 이 거리 안의 카페 테이블만 "그 테이블에서 시작"으로 인정
+const TABLE_TOP_SURFACE_Y = 0.75; // buildCafeTable() top(y=0.72)+두께 절반(0.03)
+const BOARD_WORLD_SIZE = 0.62; // 테이블 상판(반지름 0.45)에 안전하게 들어가는 정사각 보드 한 변
+
+function findNearbyCafeTable(pos){
+  let best = null, bestDist = TABLE_INVITE_MAX_DIST;
+  for(const t of cafeTables){
+    const d = pos.distanceTo(t.position);
+    if(d < bestDist){ bestDist = d; best = t; }
+  }
+  return best;
+}
 
 const minigameReadyListEl = document.getElementById('minigameReadyList');
 function renderMinigameInviteList(){
+  const nearTable = findNearbyCafeTable(me.model.position);
+  if(!nearTable){
+    minigameReadyListEl.textContent = '카페 테이블 근처에 있어야 미니게임을 시작할 수 있어요';
+    return;
+  }
   const ids = mesh.peers;
   if(!ids.length){
     minigameReadyListEl.textContent = '같이 할 상대가 없어요(먼저 누가 들어와야 함)';
@@ -2068,30 +2183,31 @@ function renderMinigameInviteList(){
     });
     const btn = document.createElement('button');
     btn.textContent = `${name}님께 초대`;
-    btn.addEventListener('click', ()=> sendGameInvite(id, select.value));
+    btn.addEventListener('click', ()=> sendGameInvite(id, select.value, nearTable));
     row.appendChild(select);
     row.appendChild(btn);
     minigameReadyListEl.appendChild(row);
   });
 }
 
-let activeGame = null; // {game, opponentId, opponentName, board, size, winLen, mySymbol, oppSymbol, myTurn, over, inviteId}
-let pendingInvite = null; // 내가 받은, 아직 응답 안 한 초대 — {fromId, game, inviteId}
+let activeGame = null; // {game, opponentId, opponentName, board, size, winLen, mySymbol, oppSymbol, myTurn, over, inviteId, tableIndex}
+let pendingInvite = null; // 내가 받은, 아직 응답 안 한 초대 — {fromId, game, inviteId, tableIndex}
 const gameInvitePromptEl = document.getElementById('gameInvitePrompt');
 const gameInviteTextEl = document.getElementById('gameInviteText');
 
 // 초대를 보낸 시점엔 아직 상대가 수락(game_accept) 안 했지만, 그 응답이
 // 왔을 때 매칭할 수 있게 activeGame을 미리 만들어두되 myTurn만 false로
 // 잠가둔다(accept 오면 handleGameMessage가 true로 바꿔서 시작).
-function sendGameInvite(peerId, game){
+function sendGameInvite(peerId, game, table){
   const inviteId = Math.random().toString(36).slice(2);
   const av = remoteAvatars.get(peerId);
+  const tableIndex = cafeTables.indexOf(table);
   activeGame = {
-    game, opponentId: peerId, opponentName: (av && av.nickname) || '상대', inviteId,
+    game, opponentId: peerId, opponentName: (av && av.nickname) || '상대', inviteId, tableIndex,
     ...makeEmptyBoard(MINIGAMES[game]),
     mySymbol: 'X', oppSymbol: 'O', myTurn: false,
   };
-  mesh.sendTo(peerId, {type:'game_invite', game, inviteId});
+  mesh.sendTo(peerId, {type:'game_invite', game, inviteId, tableIndex});
   logEvent(`${(av && av.nickname) || '상대'}님에게 ${MINIGAMES[game].name} 초대를 보냈어요`);
   minigamePopoverEl.hidden = true;
 }
@@ -2105,13 +2221,13 @@ function handleGameMessage(fromId, av, msg){
       mesh.sendTo(fromId, {type:'game_decline', inviteId: msg.inviteId});
       return;
     }
-    pendingInvite = {fromId, game: msg.game, inviteId: msg.inviteId};
+    pendingInvite = {fromId, game: msg.game, inviteId: msg.inviteId, tableIndex: msg.tableIndex};
     gameInviteTextEl.textContent = `${name}님이 ${MINIGAMES[msg.game].name} 대결을 신청했어요`;
     gameInvitePromptEl.hidden = false;
   } else if(msg.type === 'game_accept'){
     if(!activeGame || activeGame.opponentId !== fromId || activeGame.inviteId !== msg.inviteId) return;
     activeGame.myTurn = true; // 초대한 쪽(=선공, X)이 먼저 둔다
-    openGameModal();
+    openGameOnTable();
   } else if(msg.type === 'game_decline'){
     logEvent(`${name}님이 게임 초대를 거절했어요`);
     if(activeGame && activeGame.opponentId === fromId && activeGame.inviteId === msg.inviteId) activeGame = null;
@@ -2121,12 +2237,12 @@ function handleGameMessage(fromId, av, msg){
   } else if(msg.type === 'game_leave'){
     if(activeGame && activeGame.opponentId === fromId){
       logEvent(`${name}님이 게임을 나갔어요`);
-      closeGameModal();
+      closeGameBoard();
     }
   } else if(msg.type === 'game_rematch'){
     if(!activeGame || activeGame.opponentId !== fromId) return;
     // 재대결 요청은 상대(원래 선공이던 나)가 다시 선공을 잡는다 — 같은
-    // inviteId로 새 판만 여는 정도라 별도 수락 절차 없이 바로 시작.
+    // inviteId/테이블로 새 판만 여는 정도라 별도 수락 절차 없이 바로 시작.
     resetGameBoard();
     activeGame.myTurn = true;
     renderGameBoard();
@@ -2135,17 +2251,17 @@ function handleGameMessage(fromId, av, msg){
 
 document.getElementById('gameInviteAcceptBtn').addEventListener('click', ()=>{
   if(!pendingInvite) return;
-  const { fromId, game, inviteId } = pendingInvite;
+  const { fromId, game, inviteId, tableIndex } = pendingInvite;
   const av = remoteAvatars.get(fromId);
   activeGame = {
-    game, opponentId: fromId, opponentName: (av && av.nickname) || '상대', inviteId,
+    game, opponentId: fromId, opponentName: (av && av.nickname) || '상대', inviteId, tableIndex,
     ...makeEmptyBoard(MINIGAMES[game]),
     mySymbol: 'O', oppSymbol: 'X', myTurn: false, // 초대받은 쪽은 후공(O)
   };
   mesh.sendTo(fromId, {type:'game_accept', inviteId});
   pendingInvite = null;
   gameInvitePromptEl.hidden = true;
-  openGameModal();
+  openGameOnTable();
 });
 document.getElementById('gameInviteDeclineBtn').addEventListener('click', ()=>{
   if(!pendingInvite) return;
@@ -2161,26 +2277,55 @@ function resetGameBoard(){
   Object.assign(activeGame, makeEmptyBoard(MINIGAMES[activeGame.game]));
 }
 
-const gameModalEl = document.getElementById('gameModal');
+const gameHudEl = document.getElementById('gameHud');
 const gameTitleEl = document.getElementById('gameTitle');
 const gameStatusEl = document.getElementById('gameStatus');
-const gameBoardEl = document.getElementById('gameBoard');
 const gameFooterEl = document.getElementById('gameFooter');
 const gameResultTextEl = document.getElementById('gameResultText');
+let activeGameBoardMesh = null, activeGameCanvas = null, activeGameCtx = null, activeGameTexture = null;
 
-function openGameModal(){
+function buildGameBoardMesh(){
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 260; // 오목(13x13)도 칸당 20px은 나오는 해상도
+  activeGameCanvas = canvas;
+  activeGameCtx = canvas.getContext('2d');
+  activeGameTexture = new THREE.CanvasTexture(canvas);
+  const geo = new THREE.PlaneGeometry(BOARD_WORLD_SIZE, BOARD_WORLD_SIZE);
+  const mat = new THREE.MeshBasicMaterial({ map: activeGameTexture });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI/2; // 바닥/테이블 상판과 같은 방식으로 눕혀서 위를 보게
+  return mesh;
+}
+
+function openGameOnTable(){
+  const table = cafeTables[activeGame.tableIndex];
+  const boardMesh = buildGameBoardMesh();
+  boardMesh.position.set(table.position.x, TABLE_TOP_SURFACE_Y + 0.006, table.position.z);
+  scene.add(boardMesh);
+  activeGameBoardMesh = boardMesh;
+  // 나(게임 참가자)만 카메라가 이 테이블에 고정된다 — 다른 사람 화면엔
+  // 영향 없음(관전 기능 자체가 없어서 애초에 이 상태를 모름).
+  cameraFocusPoint = new THREE.Vector3(table.position.x, TABLE_TOP_SURFACE_Y + 0.3, table.position.z);
   gameTitleEl.textContent = `${MINIGAMES[activeGame.game].name} vs ${activeGame.opponentName}`;
   gameFooterEl.hidden = true;
-  gameModalEl.hidden = false;
+  gameHudEl.hidden = false;
   renderGameBoard();
 }
-function closeGameModal(){
-  gameModalEl.hidden = true;
+function closeGameBoard(){
+  if(activeGameBoardMesh){
+    scene.remove(activeGameBoardMesh);
+    activeGameBoardMesh.geometry.dispose();
+    activeGameBoardMesh.material.dispose();
+    if(activeGameTexture) activeGameTexture.dispose();
+    activeGameBoardMesh = null; activeGameCanvas = null; activeGameCtx = null; activeGameTexture = null;
+  }
+  cameraFocusPoint = null;
+  gameHudEl.hidden = true;
   activeGame = null;
 }
 document.getElementById('gameCloseBtn').addEventListener('click', ()=>{
   if(activeGame) mesh.sendTo(activeGame.opponentId, {type:'game_leave', inviteId: activeGame.inviteId});
-  closeGameModal();
+  closeGameBoard();
 });
 document.getElementById('gameRematchBtn').addEventListener('click', ()=>{
   if(!activeGame) return;
@@ -2191,26 +2336,53 @@ document.getElementById('gameRematchBtn').addEventListener('click', ()=>{
   renderGameBoard();
 });
 
-function renderGameBoard(){
-  const { size } = activeGame;
-  gameBoardEl.style.gridTemplateColumns = `repeat(${size}, 28px)`;
-  gameBoardEl.innerHTML = '';
-  for(let i=0;i<size*size;i++){
-    const cell = document.createElement('div');
-    cell.className = 'gameCell';
-    const v = activeGame.board[i];
-    if(v){ cell.classList.add('filled', v==='X' ? 'mark-x' : 'mark-o'); cell.textContent = v; }
-    cell.addEventListener('click', ()=> onCellClick(i));
-    gameBoardEl.appendChild(cell);
+// 캔버스에 격자 + 착수 기호를 직접 그려서 텍스처로 올린다(담배 연기의
+// makeSmokeTexture와 같은 패턴) — DOM 그리드 대신 진짜 "테이블에 그림
+// 그려진 판" 느낌을 내려는 것.
+function drawGameBoardCanvas(){
+  if(!activeGame || !activeGameCtx) return;
+  const ctx = activeGameCtx;
+  const { size, board } = activeGame;
+  const W = activeGameCanvas.width;
+  const cell = W / size;
+  ctx.fillStyle = '#e8d9b8'; // BENCH_PALETTE 나무톤과 어울리는 보드 바탕
+  ctx.fillRect(0, 0, W, W);
+  ctx.strokeStyle = '#8a6239';
+  ctx.lineWidth = Math.max(1, cell*0.04);
+  for(let i=1;i<size;i++){
+    ctx.beginPath(); ctx.moveTo(i*cell, 0); ctx.lineTo(i*cell, W); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i*cell); ctx.lineTo(W, i*cell); ctx.stroke();
   }
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold ${Math.floor(cell*0.6)}px sans-serif`;
+  for(let idx=0; idx<board.length; idx++){
+    const v = board[idx];
+    if(!v) continue;
+    const col = idx % size, row = (idx / size) | 0;
+    ctx.fillStyle = v==='X' ? '#2f6f8f' : '#a8622a';
+    ctx.fillText(v, col*cell + cell/2, row*cell + cell/2);
+  }
+  activeGameTexture.needsUpdate = true;
+}
+function renderGameBoard(){
+  drawGameBoardCanvas();
   updateGameStatus();
 }
 function updateGameStatus(){
   if(activeGame.over) return; // 결과 문구는 gameFooter가 대신 보여줌
   gameStatusEl.textContent = activeGame.myTurn ? '내 차례' : `${activeGame.opponentName}님 차례`;
 }
-function onCellClick(i){
-  if(!activeGame || activeGame.over || !activeGame.myTurn || activeGame.board[i]) return;
+// 게임판 클릭 판정(위 renderer.domElement 클릭 핸들러에서 호출) — 레이캐스팅
+// 결과의 UV(0~1)를 칸 인덱스로 바꾼다. PlaneGeometry 기본 UV + CanvasTexture
+// 기본 flipY 조합에서 v=1이 캔버스 위쪽(row 0)에 대응되니 (1-v)로 뒤집는다.
+function onBoardClick(uv){
+  if(!activeGame || activeGame.over || !activeGame.myTurn) return;
+  const size = activeGame.size;
+  const col = Math.min(size-1, Math.max(0, Math.floor(uv.x*size)));
+  const row = Math.min(size-1, Math.max(0, Math.floor((1-uv.y)*size)));
+  const i = row*size + col;
+  if(activeGame.board[i]) return;
   applyMove(i, activeGame.mySymbol);
   mesh.sendTo(activeGame.opponentId, {type:'game_move', inviteId: activeGame.inviteId, index: i});
 }
