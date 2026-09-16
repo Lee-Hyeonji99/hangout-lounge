@@ -63,6 +63,57 @@
     background:#234;color:#cde;cursor:pointer}
   .popover button:hover{background:#345}
   #bugReportStatus{font-size:10px;color:#8fd;min-height:12px}
+
+  /* ---- 미니게임(docs/PLAN.md 10번) ----
+     1:1 대결만 우선 구현(틱택토/오목) — 3인 이상 필요한 라이어 게임,
+     룰 엔진이 필요한 체스, 동시반응 공정성 설계가 필요한 할리갈리,
+     캔버스 스트로크 동기화가 필요한 그림맞추기는 "준비 중"으로 목록에만
+     보여주고 아직 구현 안 함. */
+  .minigameLabel{font-size:11px;color:#789;margin-top:4px}
+  .minigameLabel:first-child{margin-top:0}
+  #minigameReadyList{display:flex;flex-direction:column;gap:4px}
+  .minigameInviteRow{display:flex;align-items:center;justify-content:space-between;
+    gap:8px;font-size:12px}
+  .minigameInviteRow select{font:inherit;padding:3px 5px;border-radius:5px;
+    border:1px solid #555;background:#222;color:#eee}
+  #minigameComingSoon{font-size:11px;color:#678}
+
+  /* ---- 게임 초대 프롬프트(토스트와 달리 응답 전엔 안 사라짐) ---- */
+  #gameInvitePrompt{position:absolute;left:50%;top:calc(70px + env(safe-area-inset-top,0px));
+    transform:translateX(-50%);background:#1c1c22ee;border:1px solid #567;
+    border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px;
+    font-size:13px;color:#eee;z-index:7}
+  #gameInvitePrompt[hidden]{display:none}
+  #gameInvitePrompt button{font:inherit;padding:5px 10px;border-radius:6px;
+    border:1px solid #567;background:#234;color:#cde;cursor:pointer}
+  #gameInviteAcceptBtn{background:#2a5c3a;border-color:#4a9}
+  #gameInvitePrompt button:hover{filter:brightness(1.2)}
+
+  /* ---- 게임 보드 모달(외형 꾸미기와 같은 패턴) ---- */
+  #gameModal{position:fixed;inset:0;background:#000a;z-index:11;
+    display:flex;align-items:center;justify-content:center;padding:20px}
+  #gameModal[hidden]{display:none}
+  #gameBox{background:#1c1c22;border:1px solid #445;border-radius:14px;
+    padding:18px 20px;max-width:420px;width:100%;color:#ddd}
+  #gameHeader{display:flex;justify-content:space-between;align-items:center;
+    font-size:15px;color:#fff;margin-bottom:8px}
+  #gameHeader button{background:none;border:none;color:#9ab;cursor:pointer;padding:4px}
+  #gameHeader button:hover{color:#fff}
+  #gameStatus{font-size:12px;color:#9ab;margin-bottom:10px;min-height:16px}
+  #gameBoard{display:grid;gap:3px;justify-content:center}
+  .gameCell{width:28px;height:28px;background:#242430;border:1px solid #445;
+    border-radius:3px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;font-size:16px;font-weight:700;color:#fff;user-select:none}
+  .gameCell:hover:not(.filled){background:#2e2e3c}
+  .gameCell.mark-x{color:#7cf}
+  .gameCell.mark-o{color:#fb8}
+  #gameFooter{display:flex;align-items:center;justify-content:space-between;
+    margin-top:12px;font-size:13px}
+  #gameFooter[hidden]{display:none}
+  #gameRematchBtn{font:inherit;padding:6px 12px;border-radius:6px;border:1px solid #567;
+    background:#234;color:#cde;cursor:pointer}
+  #gameRematchBtn:hover{background:#345}
+
   /* ---- 외형 꾸미기: 게임 화면을 안 가리는 모달로(예전엔 우측 패널에 늘
      펼쳐져 있어서 시야를 가린다는 피드백으로 변경) ---- */
   #appearanceModal{position:fixed;inset:0;background:#000a;z-index:11;
@@ -240,6 +291,9 @@
   <button id="peopleToggleBtn" class="iconBtn" title="접속자 목록">
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"></circle><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"></path><circle cx="17" cy="9" r="2.4"></circle><path d="M15.5 14c2.3.2 4 1.9 4 4.5"></path></svg>
   </button>
+  <button id="minigameToggleBtn" class="iconBtn" title="미니게임">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="10" rx="5"></rect><path d="M7 11v4M5 13h4"></path><circle cx="16" cy="11.5" r="1" fill="currentColor" stroke="none"></circle><circle cx="18.5" cy="14" r="1" fill="currentColor" stroke="none"></circle></svg>
+  </button>
 </div>
 <div id="bugReportPopover" class="popover" hidden>
   <textarea id="bugReportText" rows="3" maxlength="500"
@@ -256,6 +310,17 @@
   <div>닉네임: <span id="nicknameDisplay"></span>
     <button id="changeNicknameBtn">변경</button></div>
   <div id="peerList">연결된 상대: 없음</div>
+</div>
+<div id="minigamePopover" class="popover" hidden>
+  <div class="minigameLabel">1:1 대결(현재 구현됨)</div>
+  <div id="minigameReadyList"></div>
+  <div class="minigameLabel">준비 중 — 다음에 추가 예정</div>
+  <div id="minigameComingSoon">체스 · 할리갈리 · 그림맞추기(3인 이상 필요한 라이어 게임 포함)</div>
+</div>
+<div id="gameInvitePrompt" hidden>
+  <span id="gameInviteText"></span>
+  <button id="gameInviteAcceptBtn">수락</button>
+  <button id="gameInviteDeclineBtn">거절</button>
 </div>
 <div id="netPanel">
   <span id="roomSummary">방 배정 중…</span>
@@ -329,6 +394,23 @@
 
 <div id="labelLayer"></div>
 <div id="toastLayer"></div>
+
+<div id="gameModal" hidden>
+  <div id="gameBox">
+    <div id="gameHeader">
+      <span id="gameTitle"></span>
+      <button id="gameCloseBtn" title="나가기">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+    <div id="gameStatus"></div>
+    <div id="gameBoard"></div>
+    <div id="gameFooter" hidden>
+      <span id="gameResultText"></span>
+      <button id="gameRematchBtn">다시하기</button>
+    </div>
+  </div>
+</div>
 
 <div id="appearanceModal" hidden>
   <div id="appearanceBox">
@@ -1381,7 +1463,8 @@ document.getElementById('hintToggleBtn').addEventListener('click', ()=>{
 const bugReportPopoverEl = document.getElementById('bugReportPopover');
 const manualConnectPopoverEl = document.getElementById('manualConnectPopover');
 const peoplePopoverEl = document.getElementById('peoplePopover');
-const allPopovers = [bugReportPopoverEl, manualConnectPopoverEl, peoplePopoverEl];
+const minigamePopoverEl = document.getElementById('minigamePopover');
+const allPopovers = [bugReportPopoverEl, manualConnectPopoverEl, peoplePopoverEl, minigamePopoverEl];
 function togglePopover(el){
   const willOpen = el.hidden;
   allPopovers.forEach(p=>{ p.hidden = true; });
@@ -1390,6 +1473,10 @@ function togglePopover(el){
 document.getElementById('bugReportToggleBtn').addEventListener('click', ()=>togglePopover(bugReportPopoverEl));
 document.getElementById('manualConnectToggleBtn').addEventListener('click', ()=>togglePopover(manualConnectPopoverEl));
 document.getElementById('peopleToggleBtn').addEventListener('click', ()=>togglePopover(peoplePopoverEl));
+document.getElementById('minigameToggleBtn').addEventListener('click', ()=>{
+  renderMinigameInviteList();
+  togglePopover(minigamePopoverEl);
+});
 
 // 채팅 — PC에서 전송 후 입력창 포커스를 잃어서 매번 다시 클릭해야 하는 게
 // 불편하다는 피드백으로 blur() 호출을 뺐다(Escape로 취소할 때만 명시적으로
@@ -1876,6 +1963,13 @@ const mesh = createMesh({
     }
     announcedJoin.delete(id);
     updatePeerList();
+    // 게임 상대가 끊기면 그 자리에서 게임판이 멈춰버리니(더 이상 응답
+    // 올 리 없음) game_leave를 받은 것처럼 바로 정리한다.
+    if(activeGame && activeGame.opponentId === id) closeGameModal();
+    if(pendingInvite && pendingInvite.fromId === id){
+      pendingInvite = null;
+      gameInvitePromptEl.hidden = true;
+    }
   },
   onData: (fromId, msg)=>{
     const av = remoteAvatars.get(fromId);
@@ -1912,6 +2006,8 @@ const mesh = createMesh({
       const name = av.nickname || '???';
       appendChatLine(name, msg.text);
       showChatBubble(av, name, msg.text);
+    } else if(msg.type && msg.type.startsWith('game_')){
+      handleGameMessage(fromId, av, msg);
     }
   },
 });
@@ -1920,6 +2016,239 @@ function updatePeerList(){
   const ids = mesh.peers;
   peerListEl.textContent = '연결된 상대: ' + (ids.length ? ids.join(', ') : '없음');
   updateRoomSummary(); // 인원수가 여기 바뀔 때마다 같이 갱신
+}
+
+/* ---- 미니게임(docs/PLAN.md 10번) ----
+   요청받은 6개(틱택토/오목/할리갈리/체스/라이어/그림맞추기) 중 1:1로
+   깔끔하게 되는 틱택토·오목만 먼저 구현했다. 나머지 셋은 이 mesh 구조
+   (호스트 없는 순수 P2P, 서버 권위 없음)에서 바로 만들면 문제가 생겨서
+   보류함:
+   - 라이어 게임: 원래 "말 안 하는 라이어 1명 vs 아는 사람 여럿"이 핵심인데
+     최소 3명이 있어야 게임이 성립한다 — 지금 초대 흐름은 1:1 전용이라
+     그룹 로비 구조(누가 들어왔는지, 몇 명이 모여야 시작하는지)를 새로
+     설계해야 함.
+   - 체스: 오목/틱택토처럼 "칸에 두면 끝"이 아니라 기물별 이동 규칙,
+     체크/체크메이트, 캐슬링/앙파상/프로모션까지 있어서 규칙 엔진 자체가
+     이 프로젝트의 다른 어떤 기능보다 큼 — 정식으로 하려면 별도 작업으로
+     떼서 진행하는 게 맞다고 판단.
+   - 할리갈리: "누가 먼저 종을 쳤는지"를 판정해야 하는데, 서버가 없는
+     순수 P2P라 두 사람이 각자 자기 클라이언트에서 잰 타이밍을 비교할
+     기준이 없다(네트워크 지연에 따라 다르게 보임 — 판정 공정성 문제).
+     둘 중 한쪽을 "판정자"로 정하는 등 설계 결정이 필요해서 보류.
+
+   1:1 대결 흐름: 초대(game_invite, sendTo로 상대 한 명에게만) → 수락/
+   거절(game_accept/game_decline) → 이후 착수(game_move)도 전부 그
+   상대에게만 sendTo — 방에 다른 사람이 있어도 그 사람들에게는 하나도
+   안 감(broadcast가 아니라 sendTo를 쓰는 이유). 턴제라 같은 순서로
+   메시지를 주고받는 한 양쪽 보드가 항상 똑같아지므로(결정론적), 이걸
+   조정해줄 서버가 따로 필요 없다. */
+const MINIGAMES = {
+  tictactoe: { name: '틱택토', size: 3, winLen: 3 },
+  omok:      { name: '오목',   size: 13, winLen: 5 },
+};
+
+const minigameReadyListEl = document.getElementById('minigameReadyList');
+function renderMinigameInviteList(){
+  const ids = mesh.peers;
+  if(!ids.length){
+    minigameReadyListEl.textContent = '같이 할 상대가 없어요(먼저 누가 들어와야 함)';
+    return;
+  }
+  minigameReadyListEl.innerHTML = '';
+  ids.forEach(id=>{
+    const av = remoteAvatars.get(id);
+    const name = (av && av.nickname) || '(닉네임 대기중)';
+    const row = document.createElement('div');
+    row.className = 'minigameInviteRow';
+    const select = document.createElement('select');
+    Object.entries(MINIGAMES).forEach(([key, g])=>{
+      const opt = document.createElement('option');
+      opt.value = key; opt.textContent = g.name;
+      select.appendChild(opt);
+    });
+    const btn = document.createElement('button');
+    btn.textContent = `${name}님께 초대`;
+    btn.addEventListener('click', ()=> sendGameInvite(id, select.value));
+    row.appendChild(select);
+    row.appendChild(btn);
+    minigameReadyListEl.appendChild(row);
+  });
+}
+
+let activeGame = null; // {game, opponentId, opponentName, board, size, winLen, mySymbol, oppSymbol, myTurn, over, inviteId}
+let pendingInvite = null; // 내가 받은, 아직 응답 안 한 초대 — {fromId, game, inviteId}
+const gameInvitePromptEl = document.getElementById('gameInvitePrompt');
+const gameInviteTextEl = document.getElementById('gameInviteText');
+
+// 초대를 보낸 시점엔 아직 상대가 수락(game_accept) 안 했지만, 그 응답이
+// 왔을 때 매칭할 수 있게 activeGame을 미리 만들어두되 myTurn만 false로
+// 잠가둔다(accept 오면 handleGameMessage가 true로 바꿔서 시작).
+function sendGameInvite(peerId, game){
+  const inviteId = Math.random().toString(36).slice(2);
+  const av = remoteAvatars.get(peerId);
+  activeGame = {
+    game, opponentId: peerId, opponentName: (av && av.nickname) || '상대', inviteId,
+    ...makeEmptyBoard(MINIGAMES[game]),
+    mySymbol: 'X', oppSymbol: 'O', myTurn: false,
+  };
+  mesh.sendTo(peerId, {type:'game_invite', game, inviteId});
+  logEvent(`${(av && av.nickname) || '상대'}님에게 ${MINIGAMES[game].name} 초대를 보냈어요`);
+  minigamePopoverEl.hidden = true;
+}
+
+function handleGameMessage(fromId, av, msg){
+  const name = av.nickname || '상대';
+  if(msg.type === 'game_invite'){
+    // 이미 다른 게임 중이거나 다른 초대에 응답 대기 중이면 자동 거절
+    // (동시에 여러 판을 지원할 만큼 UI가 복잡해질 필요는 없다고 봄).
+    if(activeGame || pendingInvite){
+      mesh.sendTo(fromId, {type:'game_decline', inviteId: msg.inviteId});
+      return;
+    }
+    pendingInvite = {fromId, game: msg.game, inviteId: msg.inviteId};
+    gameInviteTextEl.textContent = `${name}님이 ${MINIGAMES[msg.game].name} 대결을 신청했어요`;
+    gameInvitePromptEl.hidden = false;
+  } else if(msg.type === 'game_accept'){
+    if(!activeGame || activeGame.opponentId !== fromId || activeGame.inviteId !== msg.inviteId) return;
+    activeGame.myTurn = true; // 초대한 쪽(=선공, X)이 먼저 둔다
+    openGameModal();
+  } else if(msg.type === 'game_decline'){
+    logEvent(`${name}님이 게임 초대를 거절했어요`);
+    if(activeGame && activeGame.opponentId === fromId && activeGame.inviteId === msg.inviteId) activeGame = null;
+  } else if(msg.type === 'game_move'){
+    if(!activeGame || activeGame.opponentId !== fromId || activeGame.inviteId !== msg.inviteId) return;
+    applyMove(msg.index, activeGame.oppSymbol);
+  } else if(msg.type === 'game_leave'){
+    if(activeGame && activeGame.opponentId === fromId){
+      logEvent(`${name}님이 게임을 나갔어요`);
+      closeGameModal();
+    }
+  } else if(msg.type === 'game_rematch'){
+    if(!activeGame || activeGame.opponentId !== fromId) return;
+    // 재대결 요청은 상대(원래 선공이던 나)가 다시 선공을 잡는다 — 같은
+    // inviteId로 새 판만 여는 정도라 별도 수락 절차 없이 바로 시작.
+    resetGameBoard();
+    activeGame.myTurn = true;
+    renderGameBoard();
+  }
+}
+
+document.getElementById('gameInviteAcceptBtn').addEventListener('click', ()=>{
+  if(!pendingInvite) return;
+  const { fromId, game, inviteId } = pendingInvite;
+  const av = remoteAvatars.get(fromId);
+  activeGame = {
+    game, opponentId: fromId, opponentName: (av && av.nickname) || '상대', inviteId,
+    ...makeEmptyBoard(MINIGAMES[game]),
+    mySymbol: 'O', oppSymbol: 'X', myTurn: false, // 초대받은 쪽은 후공(O)
+  };
+  mesh.sendTo(fromId, {type:'game_accept', inviteId});
+  pendingInvite = null;
+  gameInvitePromptEl.hidden = true;
+  openGameModal();
+});
+document.getElementById('gameInviteDeclineBtn').addEventListener('click', ()=>{
+  if(!pendingInvite) return;
+  mesh.sendTo(pendingInvite.fromId, {type:'game_decline', inviteId: pendingInvite.inviteId});
+  pendingInvite = null;
+  gameInvitePromptEl.hidden = true;
+});
+
+function makeEmptyBoard({ size, winLen }){
+  return { size, winLen, board: new Array(size*size).fill(null), over: false };
+}
+function resetGameBoard(){
+  Object.assign(activeGame, makeEmptyBoard(MINIGAMES[activeGame.game]));
+}
+
+const gameModalEl = document.getElementById('gameModal');
+const gameTitleEl = document.getElementById('gameTitle');
+const gameStatusEl = document.getElementById('gameStatus');
+const gameBoardEl = document.getElementById('gameBoard');
+const gameFooterEl = document.getElementById('gameFooter');
+const gameResultTextEl = document.getElementById('gameResultText');
+
+function openGameModal(){
+  gameTitleEl.textContent = `${MINIGAMES[activeGame.game].name} vs ${activeGame.opponentName}`;
+  gameFooterEl.hidden = true;
+  gameModalEl.hidden = false;
+  renderGameBoard();
+}
+function closeGameModal(){
+  gameModalEl.hidden = true;
+  activeGame = null;
+}
+document.getElementById('gameCloseBtn').addEventListener('click', ()=>{
+  if(activeGame) mesh.sendTo(activeGame.opponentId, {type:'game_leave', inviteId: activeGame.inviteId});
+  closeGameModal();
+});
+document.getElementById('gameRematchBtn').addEventListener('click', ()=>{
+  if(!activeGame) return;
+  resetGameBoard();
+  activeGame.myTurn = false; // 재대결을 누른 쪽이 후공(상대가 다시 선공)
+  mesh.sendTo(activeGame.opponentId, {type:'game_rematch', inviteId: activeGame.inviteId});
+  gameFooterEl.hidden = true;
+  renderGameBoard();
+});
+
+function renderGameBoard(){
+  const { size } = activeGame;
+  gameBoardEl.style.gridTemplateColumns = `repeat(${size}, 28px)`;
+  gameBoardEl.innerHTML = '';
+  for(let i=0;i<size*size;i++){
+    const cell = document.createElement('div');
+    cell.className = 'gameCell';
+    const v = activeGame.board[i];
+    if(v){ cell.classList.add('filled', v==='X' ? 'mark-x' : 'mark-o'); cell.textContent = v; }
+    cell.addEventListener('click', ()=> onCellClick(i));
+    gameBoardEl.appendChild(cell);
+  }
+  updateGameStatus();
+}
+function updateGameStatus(){
+  if(activeGame.over) return; // 결과 문구는 gameFooter가 대신 보여줌
+  gameStatusEl.textContent = activeGame.myTurn ? '내 차례' : `${activeGame.opponentName}님 차례`;
+}
+function onCellClick(i){
+  if(!activeGame || activeGame.over || !activeGame.myTurn || activeGame.board[i]) return;
+  applyMove(i, activeGame.mySymbol);
+  mesh.sendTo(activeGame.opponentId, {type:'game_move', inviteId: activeGame.inviteId, index: i});
+}
+function applyMove(i, symbol){
+  if(!activeGame || activeGame.over || activeGame.board[i]) return;
+  activeGame.board[i] = symbol;
+  activeGame.myTurn = (symbol !== activeGame.mySymbol); // 내가 뒀으면 상대 차례로, 상대가 뒀으면 내 차례로
+  renderGameBoard();
+  const winner = checkWin(activeGame.board, activeGame.size, activeGame.winLen, i, symbol);
+  if(winner){
+    endGame(symbol === activeGame.mySymbol ? '내가 이겼어요' : `${activeGame.opponentName}님이 이겼어요`);
+  } else if(activeGame.board.every(c=>c)){
+    endGame('무승부');
+  }
+}
+function endGame(text){
+  activeGame.over = true;
+  gameResultTextEl.textContent = text;
+  gameFooterEl.hidden = false;
+  gameStatusEl.textContent = '';
+}
+// 마지막으로 둔 칸(lastIndex)에서 4방향(가로/세로/대각선 둘)으로 뻗어나가며
+// 같은 기호가 winLen개 연속인지만 확인 — 보드 전체를 매번 훑지 않아도 돼서
+// 오목(13x13=169칸)에서도 가볍다.
+function checkWin(board, size, winLen, lastIndex, symbol){
+  const x0 = lastIndex % size, y0 = (lastIndex / size) | 0;
+  const dirs = [[1,0],[0,1],[1,1],[1,-1]];
+  for(const [dx,dy] of dirs){
+    let count = 1;
+    for(const sign of [1,-1]){
+      let x = x0 + dx*sign, y = y0 + dy*sign;
+      while(x>=0 && x<size && y>=0 && y<size && board[y*size+x]===symbol){
+        count++; x += dx*sign; y += dy*sign;
+      }
+    }
+    if(count >= winLen) return true;
+  }
+  return false;
 }
 
 /* ---- 유령 접속 정리(이미 나간 사람이 계속 남아있던 문제) ----
