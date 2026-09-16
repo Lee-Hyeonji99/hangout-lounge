@@ -36,15 +36,16 @@
     background:#0008;padding:8px 12px;border-radius:8px;pointer-events:none;max-width:420px;
     transition:opacity 0.3s,transform 0.3s}
   #hint.collapsed{opacity:0;transform:translateY(-6px);position:absolute;pointer-events:none}
+  /* ---- 우측 상단 방 정보(방 번호/인원수만) ----
+     예전엔 내 ID/닉네임/연결된 상대 목록/입퇴장 로그까지 다 여기 쌓여
+     있어서 사람이 많아지면(연결된 상대 목록이 길어지면) 이 상자 자체의
+     크기가 계속 달라졌다 — "연결된 사람 많아도 이 크기 유지되어야 함"
+     요청으로 방 번호·인원수라는 항상 짧은 텍스트만 남기고 나머지(내 ID/
+     닉네임 변경/접속자 목록)는 아래 #peoplePopover로, 로그는 토스트만
+     남기고 없앴다(#netPanel 자체는 이제 내용 길이가 거의 고정이라 크기도
+     안정적). */
   #netPanel{font-size:13px;color:#ddd;flex-shrink:0;
-    background:#0009;padding:10px 12px;border-radius:8px;display:flex;flex-direction:column;gap:6px;min-width:240px}
-  #netPanel input{font:inherit;padding:5px 7px;border-radius:5px;border:1px solid #555;background:#222;color:#eee}
-  #netPanel button{font:inherit;padding:5px 9px;border-radius:5px;border:1px solid #567;background:#234;color:#cde;cursor:pointer}
-  #netPanel button:hover{background:#345}
-  /* ---- 상단 유틸 아이콘 버튼(외형/버그신고/수동연결) ----
-     예전엔 전부 우측 패널(#netPanel) 안에 쌓여있었는데("버그신고랑
-     수동연결은 별도 UI로 두자" 요청으로) 각자 독립된 아이콘 버튼 +
-     팝오버로 분리했다. #netPanel엔 이제 접속 정보/로그만 남음. */
+    background:#0009;padding:8px 12px;border-radius:8px;white-space:nowrap}
   #utilBar{display:flex;gap:8px;flex-shrink:0}
   .iconBtn{width:32px;height:32px;border-radius:50%;flex-shrink:0;
     background:#0009;border:1px solid #567;color:#cde;cursor:pointer;
@@ -95,8 +96,6 @@
     border-radius:8px;border:1px solid #456;opacity:0;
     transform:translateY(-6px);transition:opacity 0.25s,transform 0.25s}
   .toast.show{opacity:1;transform:translateY(0)}
-  #eventLog{font-size:10px;color:#789;max-height:70px;overflow-y:auto;
-    margin-top:2px;display:flex;flex-direction:column-reverse;gap:2px}
   #myId{font-family:monospace;color:#8fd}
 
   /* ---- 채팅(우측 하단 고정) ----
@@ -119,7 +118,6 @@
     border:1px solid #567;background:#234;color:#cde;cursor:pointer;
     display:flex;align-items:center;justify-content:center}
   #chatSendBtn:hover{background:#345}
-  #roomInfo{font-size:11px;color:#9ab}
   #peerList{font-size:11px;color:#9ab}
 
   /* ---- 모바일 터치 조이스틱(왼쪽 아래 고정, PC 키보드 입력과 병행 동작) ---- */
@@ -160,17 +158,10 @@
      기본은 숨김(데스크톱은 패널이 항상 보임) — 아래 미디어쿼리가 좁은
      화면에서만 이 버튼을 보여주고 패널은 기본 접어둔다("패널이 너무 크다"
      피드백 대응). */
-  #netPanelToggleBtn{display:none;width:40px;height:40px;border-radius:8px;
-    background:#0009;border:1px solid #456;color:#cde;align-items:center;
-    justify-content:center;cursor:pointer;flex-shrink:0}
-
   @media (max-width:520px){
     #topBar{flex-direction:column}
     #hint{font-size:12px;max-width:none;padding:6px 9px}
-    #netPanel{font-size:12px;min-width:0;width:100%;padding:8px 10px}
-    #netPanelToggleBtn{display:flex}
-    #netPanel{display:none}
-    #netPanel.open{display:flex}
+    #netPanel{font-size:12px;padding:6px 10px}
   }
 
   /* ---- 닉네임 입장 게이트(docs/PLAN.md 6-a) ---- */
@@ -240,8 +231,8 @@
   <button id="manualConnectToggleBtn" class="iconBtn" title="수동 연결(매칭 서버 없을 때만)">
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15 15 9"></path><path d="M11 6.5 12.3 5.2a3 3 0 0 1 4.3 4.3L15.3 11"></path><path d="M13 17.5 11.7 18.8a3 3 0 0 1-4.3-4.3L8.7 13"></path></svg>
   </button>
-  <button id="netPanelToggleBtn" title="메뉴">
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  <button id="peopleToggleBtn" class="iconBtn" title="접속자 목록">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"></circle><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"></path><circle cx="17" cy="9" r="2.4"></circle><path d="M15.5 14c2.3.2 4 1.9 4 4.5"></path></svg>
   </button>
 </div>
 <div id="bugReportPopover" class="popover" hidden>
@@ -254,13 +245,14 @@
   <input id="remoteIdInput" placeholder="상대 ID 붙여넣기">
   <button id="connectBtn">연결</button>
 </div>
-<div id="netPanel">
+<div id="peoplePopover" class="popover" hidden>
   내 ID: <span id="myId">연결 중…</span>
   <div>닉네임: <span id="nicknameDisplay"></span>
     <button id="changeNicknameBtn">변경</button></div>
-  <div id="roomInfo">방 배정 중…</div>
   <div id="peerList">연결된 상대: 없음</div>
-  <div id="eventLog"></div>
+</div>
+<div id="netPanel">
+  <span id="roomSummary">방 배정 중…</span>
 </div>
 </div>
 <div id="chatPanel">
@@ -1367,11 +1359,6 @@ refreshAppearanceUI();
 document.getElementById('appearanceOpenBtn').addEventListener('click', ()=>{ appearanceModalEl.hidden = false; });
 document.getElementById('appearanceCloseBtn').addEventListener('click', ()=>{ appearanceModalEl.hidden = true; });
 
-// 좁은 화면에서 패널이 너무 크다는 피드백 — 기본 접어두고 아이콘 버튼으로 토글.
-document.getElementById('netPanelToggleBtn').addEventListener('click', ()=>{
-  document.getElementById('netPanel').classList.toggle('open');
-});
-
 // 상단 조작법 안내도 항상 떠 있으면 거슬린다는 피드백 — 처음 접속했을 때부터
 // 무조건 접힌 상태로 시작한다(HTML에 class="collapsed" 고정, 예전엔 6초간
 // 펼쳐뒀다가 접었는데 그마저도 거슬린다는 추가 제보로 아예 안 보여주는 걸로
@@ -1381,22 +1368,22 @@ document.getElementById('hintToggleBtn').addEventListener('click', ()=>{
   hintEl.classList.toggle('collapsed');
 });
 
-// 버그 신고/수동 연결을 우측 패널 아코디언에서 독립된 아이콘 버튼+팝오버로
-// 분리(요청: "버그신고랑 수동연결은 별도 UI로 두자") — 서로 동시에 열려있을
-// 필요는 없어서 하나 열면 다른 하나는 닫는다.
+// 버그 신고/수동 연결/접속자 목록을 각각 독립된 아이콘 버튼+팝오버로 분리
+// (요청: "버그신고랑 수동연결은 별도 UI로 두자", "현재 접속중인 사용자
+// 목록은 별도 아이콘으로 눌러서 확인하도록") — 셋 다 동시에 열려있을
+// 필요는 없어서 하나 열면 나머지는 닫는다.
 const bugReportPopoverEl = document.getElementById('bugReportPopover');
 const manualConnectPopoverEl = document.getElementById('manualConnectPopover');
-function togglePopover(el, otherEl){
+const peoplePopoverEl = document.getElementById('peoplePopover');
+const allPopovers = [bugReportPopoverEl, manualConnectPopoverEl, peoplePopoverEl];
+function togglePopover(el){
   const willOpen = el.hidden;
-  otherEl.hidden = true;
+  allPopovers.forEach(p=>{ p.hidden = true; });
   el.hidden = !willOpen;
 }
-document.getElementById('bugReportToggleBtn').addEventListener('click', ()=>{
-  togglePopover(bugReportPopoverEl, manualConnectPopoverEl);
-});
-document.getElementById('manualConnectToggleBtn').addEventListener('click', ()=>{
-  togglePopover(manualConnectPopoverEl, bugReportPopoverEl);
-});
+document.getElementById('bugReportToggleBtn').addEventListener('click', ()=>togglePopover(bugReportPopoverEl));
+document.getElementById('manualConnectToggleBtn').addEventListener('click', ()=>togglePopover(manualConnectPopoverEl));
+document.getElementById('peopleToggleBtn').addEventListener('click', ()=>togglePopover(peoplePopoverEl));
 
 // 채팅 — PC에서 전송 후 입력창 포커스를 잃어서 매번 다시 클릭해야 하는 게
 // 불편하다는 피드백으로 blur() 호출을 뺐다(Escape로 취소할 때만 명시적으로
@@ -1808,11 +1795,11 @@ document.getElementById('changeNicknameBtn').addEventListener('click', async ()=
   resolveNicknameCollision();
 });
 
-/* ---- 입장/퇴장 토스트 + 로그 ----
-   토스트는 잠깐 떴다 사라지고, 같은 내용을 #eventLog에도 최근 몇 개만
-   남겨서 놓쳐도 다시 볼 수 있게 한다. */
+/* ---- 입장/퇴장 토스트 ----
+   예전엔 같은 내용을 #eventLog에도 누적해서 남겼는데, "누가 들어오고
+   나갔는지 로그는 토스트로 충분하다"는 피드백으로 영구 로그 목록은
+   없앴다 — 토스트만 잠깐 떴다 사라진다. */
 const toastLayerEl = document.getElementById('toastLayer');
-const eventLogEl = document.getElementById('eventLog');
 function logEvent(text){
   const toast = document.createElement('div');
   toast.className = 'toast';
@@ -1823,11 +1810,6 @@ function logEvent(text){
     toast.classList.remove('show');
     setTimeout(()=> toast.remove(), 300);
   }, 2600);
-
-  const line = document.createElement('div');
-  line.textContent = text;
-  eventLogEl.appendChild(line);
-  while(eventLogEl.children.length > 8) eventLogEl.removeChild(eventLogEl.firstChild);
 }
 const announcedJoin = new Set(); // 닉네임이 도착한 시점에 한 번만 "입장" 로그를 남기기 위함
 
@@ -1931,21 +1913,36 @@ const mesh = createMesh({
 function updatePeerList(){
   const ids = mesh.peers;
   peerListEl.textContent = '연결된 상대: ' + (ids.length ? ids.join(', ') : '없음');
+  updateRoomSummary(); // 인원수가 여기 바뀔 때마다 같이 갱신
 }
 
 /* ---- 유령 접속 정리(이미 나간 사람이 계속 남아있던 문제) ----
    탭을 그냥 닫아버리는 등 정상적인 종료 신호 없이 사라지면 WebRTC 자체의
    접속 끊김 감지가 느리거나(때에 따라 몇십 초~그 이상) 아예 안 걸리는
-   경우가 있다. 위치는 초당 ~10회 오는 게 정상이니, 한동안(6초) 아무 메시지도
-   안 오면 죽은 걸로 보고 우리 쪽에서 먼저 연결을 끊어버린다. */
-const STALE_PEER_TIMEOUT = 6000;
+   경우가 있다. 위치는 초당 ~10회 오는 게 정상이니, 한동안 아무 메시지도
+   안 오면 죽은 걸로 보고 우리 쪽에서 먼저 연결을 끊어버린다.
+
+   **버그였다가 고침 — 가만히 있어도 남들이 들어왔다 나갔다 반복함**:
+   원래 이 임계값이 6초였는데, 이게 모바일에서 너무 짧았다. 위치 전송이
+   `requestAnimationFrame` 루프에 얹혀있는데(POS_SEND_INTERVAL), 브라우저가
+   백그라운드 탭/화면 잠금 상태에서 rAF를 강하게 스로틀하거나 아예
+   멈춰버린다 — 즉 상대가 그냥 폰을 잠깐 딴 데 쓰거나 화면을 껐다 켜기만
+   해도 6초는 uneventful하게 넘겨버려서, 남들 눈엔 그 사람이 "나갔다가
+   다시 들어온" 것처럼 반복적으로 보이는 거짓 신호였다(진짜 접속 끊김이
+   아니라 우리 쪽 워치독이 너무 성급하게 판단한 것). 서버 쪽 룸 정리
+   기준(`api/room.js`의 `STALE_MS`, 30초)과 비슷한 자리로 올려서 정상적인
+   백그라운드 전환은 버티고, 진짜 죽은 접속만 정리되게 함. */
+const STALE_PEER_TIMEOUT = 25000;
 // 실제로 끊기기(STALE_PEER_TIMEOUT) 전에 미리 "곧 끊길 것 같다"를
 // 보여주는 경고 임계값 — 사용자가 "누구는 연결되고 누구는 안 되는데
 // 왜그런거야"라고 물어본 것에 대응: 원인 자체(NAT 종류에 따라 P2P 직접
 // 연결이 실패하는 경우가 있음, STUN만 쓰고 TURN 중계 서버는 아직 없어서
 // 완전히 못 뚫는 조합이 존재함 — docs/PLAN.md 3-b)를 UI로 해결할 순
-// 없지만, 적어도 "지금 연결이 불안정하다"는 신호는 보여준다.
-const CONN_WARN_TIMEOUT = 2500;
+// 없지만, 적어도 "지금 연결이 불안정하다"는 신호는 보여준다. 위
+// STALE_PEER_TIMEOUT을 올린 것과 같은 이유로 이 값도 같이 올렸다 —
+// 안 그러면 잠깐의 백그라운드 전환에도 경고 아이콘이 계속 깜빡여서
+// 마찬가지로 성가시다.
+const CONN_WARN_TIMEOUT = 8000;
 const connWarnIconEl = document.getElementById('connWarnIcon');
 function updateConnWarnIcon(){
   let bad = !navigator.onLine;
@@ -1973,8 +1970,15 @@ setInterval(()=>{
    연동 전인 배포에선 /api/room이 없거나 실패하는 게 정상이다 — 그럴 땐
    콘솔 경고만 남기고 조용히 넘어가서, 기존 수동 "상대 ID 붙여넣기"로
    계속 쓸 수 있게 한다(매칭 서버는 있으면 좋은 보강 기능이지 필수는 아님). */
-const roomInfoEl = document.getElementById('roomInfo');
+const roomSummaryEl = document.getElementById('roomSummary');
 let myRoomId = null;
+// 우측 상단 상자엔 방 번호·인원수만 보여준다(요청: "저 창에 나올 정보는
+// 방 번호, 인원수정도") — 텍스트 길이가 항상 짧게 고정돼서 사람이 많이
+// 들어와도 상자 크기가 안 변한다. 내 ID/닉네임/전체 목록은 #peoplePopover로.
+function updateRoomSummary(){
+  if(myRoomId == null){ roomSummaryEl.textContent = '방 배정 중…'; return; }
+  roomSummaryEl.textContent = `방 #${myRoomId} · ${mesh.peers.length + 1}명`;
+}
 
 async function autoJoinRoom(myId){
   const r = await fetch('/api/room?action=join', {
@@ -1984,7 +1988,7 @@ async function autoJoinRoom(myId){
   if(!r.ok) throw new Error('status '+r.status);
   const {roomId, peers} = await r.json();
   myRoomId = roomId;
-  roomInfoEl.textContent = '방 #' + roomId;
+  updateRoomSummary();
   peers.forEach(id=>mesh.connectTo(id));
   startRoomHeartbeat();
 }
@@ -2018,11 +2022,11 @@ mesh.ready().then(async id=>{
   // 2탭 테스트, 또는 매칭 서버가 없는 환경에서의 디버깅용).
   const params = new URLSearchParams(location.search);
   const target = params.get('connect');
-  if(target){ mesh.connectTo(target); roomInfoEl.textContent = '수동 연결 모드'; return; }
+  if(target){ mesh.connectTo(target); roomSummaryEl.textContent = '수동 연결 모드'; return; }
   try{
     await autoJoinRoom(id);
   }catch(err){
-    roomInfoEl.textContent = '매칭 서버 없음(수동 연결만 가능)';
+    roomSummaryEl.textContent = '매칭 서버 없음(수동 연결만 가능)';
     console.warn('[hangout-lounge] 방 자동 배정 실패 — 로컬 개발/매칭 서버 미설정 환경일 수 있음:', err.message);
   }
 });
