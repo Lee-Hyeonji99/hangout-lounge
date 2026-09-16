@@ -1933,37 +1933,25 @@ function updatePeerList(){
    기준(`api/room.js`의 `STALE_MS`, 30초)과 비슷한 자리로 올려서 정상적인
    백그라운드 전환은 버티고, 진짜 죽은 접속만 정리되게 함. */
 const STALE_PEER_TIMEOUT = 25000;
-// 실제로 끊기기(STALE_PEER_TIMEOUT) 전에 미리 "곧 끊길 것 같다"를
-// 보여주는 경고 임계값 — 사용자가 "누구는 연결되고 누구는 안 되는데
-// 왜그런거야"라고 물어본 것에 대응: 원인 자체(NAT 종류에 따라 P2P 직접
-// 연결이 실패하는 경우가 있음, STUN만 쓰고 TURN 중계 서버는 아직 없어서
-// 완전히 못 뚫는 조합이 존재함 — docs/PLAN.md 3-b)를 UI로 해결할 순
-// 없지만, 적어도 "지금 연결이 불안정하다"는 신호는 보여준다. 위
-// STALE_PEER_TIMEOUT을 올린 것과 같은 이유로 이 값도 같이 올렸다 —
-// 안 그러면 잠깐의 백그라운드 전환에도 경고 아이콘이 계속 깜빡여서
-// 마찬가지로 성가시다.
-//
-// **버그였다가 고침 — 연결 정상인데도 계속 깜빡거림**: 8초까지 올렸는데도
-// 실사용에서 계속 깜빡인다는 제보. 두 가지를 더 손봤다. (1)
-// `navigator.onLine`은 브라우저/네트워크 드라이버에 따라 실제로는 멀쩡한데
-// 순간적으로 false를 잘못 보고하는 경우가 알려져 있어서(특히 VPN/특정
-// 네트워크 어댑터), 이것 하나만으로 즉시 깜빡이지 않게 함. (2) 한 번
-// "나쁨"으로 측정됐다고 바로 아이콘을 켜지 않고, 연속 2번(4초 간격)
-// 계속 나쁠 때만 켠다(히스테리시스) — 짧은 순간의 프레임 지연/네트워크
-// 잔떨림 한 번으로 깜빡이는 걸 걸러낸다. 임계값 자체도 15초로 다시 올림.
-const CONN_WARN_TIMEOUT = 15000;
+// **두 번 손보고도 계속 깜빡인다는 제보로 아예 설계를 바꿈**: 처음엔
+// "상대(remoteAvatars)로부터 한동안 위치가 안 온다"도 같이 판정했는데,
+// 방에 여러 명이 있으면 매번 다른 사람이 번갈아 잠깐씩 지연되는 것만으로도
+// (거의 항상 누군가는 살짝 느리다) 계속 "나쁨"으로 잡혀서 히스테리시스를
+// 걸어도 소용없었다 — 특정 한 명이 계속 나쁜 게 아니라 "그때그때 다른
+// 사람이 잠깐 나쁨"이 이어지는 패턴이라 카운터가 리셋될 틈이 없었던 것.
+// 게다가 이 아이콘이 뭘 말하는지도 애매했다 — 내 연결이 나쁜 건지 남의
+// 연결이 나쁜 건지 사용자 입장에서 구분이 안 됨. 그래서 **내 인터넷
+// 자체(navigator.onLine)만** 판정하는 걸로 단순화했다 — 이건 명확하게
+// "내 문제"라 뭘 해야 할지도 분명하다(와이파이/데이터 확인). 개별 상대와의
+// 연결 상태는 이 아이콘이 아니라 그 사람이 그냥 화면에서 안 보이는 걸로
+// (유령 접속 정리, 25초) 알 수 있으면 충분하다고 봄. `navigator.onLine`도
+// 브라우저에 따라 순간적으로 잘못된 값을 보고할 수 있어서, 연속 3번
+// (6초 이상) 계속 오프라인일 때만 켜고 한 번이라도 온라인이면 바로 끔.
 const connWarnIconEl = document.getElementById('connWarnIcon');
 let connWarnBadStreak = 0;
 function updateConnWarnIcon(){
-  let bad = !navigator.onLine;
-  if(!bad){
-    const now = performance.now();
-    for(const av of remoteAvatars.values()){
-      if(now - av.lastMsgAt > CONN_WARN_TIMEOUT){ bad = true; break; }
-    }
-  }
-  connWarnBadStreak = bad ? connWarnBadStreak + 1 : 0;
-  connWarnIconEl.hidden = connWarnBadStreak < 2;
+  connWarnBadStreak = navigator.onLine ? 0 : connWarnBadStreak + 1;
+  connWarnIconEl.hidden = connWarnBadStreak < 3;
 }
 addEventListener('online', updateConnWarnIcon);
 addEventListener('offline', updateConnWarnIcon);
